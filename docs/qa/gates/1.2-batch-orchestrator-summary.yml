@@ -1,0 +1,41 @@
+schema: 1
+story: "1.2"
+story_title: "批处理编排与逐条结果汇总"
+gate: PASS
+status_reason: "批处理并发与汇总回执实现完整，测试覆盖关键路径，未发现阻断问题。"
+reviewer: "Quinn (Test Architect)"
+updated: "2026-01-23T08:07:55Z"
+
+waiver: { active: false }
+
+top_issues: []
+
+risk_summary:
+  totals: { critical: 0, high: 0, medium: 0, low: 0 }
+  recommendations:
+    must_fix: []
+    monitor: []
+
+quality_score: 100
+expires: "2026-02-06T08:07:55Z"
+
+evidence:
+  tests_reviewed: 9
+  risks_identified: 0
+  trace:
+    ac_covered: [1, 2, 3, 4]
+    ac_gaps: []
+
+nfr_validation:
+  security: { status: PASS, notes: "" }
+  performance: { status: PASS, notes: "" }
+  reliability: { status: PASS, notes: "" }
+  maintainability: { status: PASS, notes: "" }
+
+recommendations:
+  immediate: []
+  future:
+    - action: "回执中显式输出 suggestion 字段以对齐后续错误回执"
+      refs: ["src/bot/commands/publish.ts"]
+    - action: "日志补充 step_id 字段以贴合结构化日志规范"
+      refs: ["src/orchestrator/batch.ts"]
