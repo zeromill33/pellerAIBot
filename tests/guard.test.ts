@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { guardPublishUrls } from "../src/bot/guard.js";
+import { guardAdminUser, guardPublishUrls } from "../src/bot/guard.js";
 import { AppError, ERROR_CODES } from "../src/orchestrator/errors.js";
 
 describe("guardPublishUrls", () => {
@@ -20,6 +20,22 @@ describe("guardPublishUrls", () => {
     } catch (error) {
       const appError = error as AppError;
       expect(appError.code).toBe(ERROR_CODES.BOT_INVALID_URL);
+    }
+  });
+});
+
+describe("guardAdminUser", () => {
+  it("allows admin users", () => {
+    guardAdminUser(123, [123, 456]);
+  });
+
+  it("throws when user is not authorized", () => {
+    try {
+      guardAdminUser(999, [123, 456]);
+      throw new Error("Expected guard to throw");
+    } catch (error) {
+      const appError = error as AppError;
+      expect(appError.code).toBe(ERROR_CODES.BOT_UNAUTHORIZED);
     }
   });
 });

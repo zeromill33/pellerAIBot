@@ -12,5 +12,8 @@
     "@types/node": "^20.11.30",
     "typescript": "^5.4.5",
     "vitest": "^1.6.0"
+  },
+  "dependencies": {
+    "grammy": "^1.21.1"
   }
 }

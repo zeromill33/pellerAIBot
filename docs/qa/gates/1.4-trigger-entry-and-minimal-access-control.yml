@@ -1,0 +1,40 @@
+schema: 1
+story: '1.4'
+story_title: '触发入口与最小权限控制'
+gate: PASS
+status_reason: '入口白名单控制与启动期配置校验到位，/publish 路由与回执覆盖测试。'
+reviewer: 'Quinn (Test Architect)'
+updated: '2026-01-23T09:27:47Z'
+
+top_issues: []
+waiver: { active: false }
+
+quality_score: 100
+expires: '2026-02-06T09:27:47Z'
+
+evidence:
+  tests_reviewed: 3
+  risks_identified: 0
+  trace:
+    ac_covered: [1, 2, 3, 4]
+    ac_gaps: []
+
+nfr_validation:
+  security:
+    status: PASS
+    notes: '管理员白名单与 TG bot token 校验具备，入口无未授权路径。'
+  performance:
+    status: PASS
+    notes: '逻辑轻量，无明显性能风险。'
+  reliability:
+    status: PASS
+    notes: '错误统一回执，bot 侧异常捕获与日志记录到位。'
+  maintainability:
+    status: PASS
+    notes: '模块边界清晰，配置与命令处理解耦。'
+
+recommendations:
+  immediate: []
+  future:
+    - action: '增加 Telegram bot 路由/启动的 mock 烟测'
+      refs: ['src/bot/telegram.ts']
