@@ -1,0 +1,232 @@
+# 附录 B：Report v1 JSON Schema（0–100 概率）
+
+> 说明：LLM 必须输出严格匹配此结构的 JSON；`market_odds` 与 `ai_vs_market` 概率字段统一使用 **0–100**。
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ReportV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "context",
+    "market_framing",
+    "disagreement_map",
+    "priced_vs_new",
+    "sentiment",
+    "key_variables",
+    "failure_modes",
+    "risk_attribution",
+    "limitations",
+    "ai_vs_market"
+  ],
+  "properties": {
+    "context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "title",
+        "url",
+        "resolution_rules_raw",
+        "time_remaining",
+        "market_odds",
+        "liquidity_proxy"
+      ],
+      "properties": {
+        "title": { "type": "string", "minLength": 1 },
+        "url": { "type": "string", "minLength": 1 },
+        "resolution_rules_raw": { "type": "string", "minLength": 1 },
+        "time_remaining": { "type": "string", "minLength": 1 },
+        "market_odds": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["yes", "no"],
+          "properties": {
+            "yes": { "type": "number", "minimum": 0, "maximum": 100 },
+            "no": { "type": "number", "minimum": 0, "maximum": 100 }
+          }
+        },
+        "liquidity_proxy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["gamma_liquidity", "book_depth_top10", "spread"],
+          "properties": {
+            "gamma_liquidity": { "type": ["number", "null"], "minimum": 0 },
+            "book_depth_top10": { "type": ["number", "null"], "minimum": 0 },
+            "spread": { "type": ["number", "null"], "minimum": 0 }
+          }
+        }
+      }
+    },
+
+    "market_framing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["core_bet", "key_assumption"],
+      "properties": {
+        "core_bet": { "type": "string", "minLength": 1 },
+        "key_assumption": { "type": "string", "minLength": 1 }
+      }
+    },
+
+    "disagreement_map": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pro", "con"],
+      "properties": {
+        "pro": {
+          "type": "array",
+          "minItems": 2,
+          "items": { "$ref": "#/$defs/evidenceItem" }
+        },
+        "con": {
+          "type": "array",
+          "minItems": 2,
+          "items": { "$ref": "#/$defs/evidenceItem" }
+        }
+      }
+    },
+
+    "priced_vs_new": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["priced_in", "new_info"],
+      "properties": {
+        "priced_in": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/pricedItem" }
+        },
+        "new_info": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/pricedItem" }
+        }
+      }
+    },
+
+    "sentiment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bias", "relation", "samples"],
+      "properties": {
+        "bias": { "type": "string", "enum": ["optimistic", "pessimistic", "neutral", "unknown"] },
+        "relation": { "type": "string", "enum": ["reinforces", "diverges", "none", "unknown"] },
+        "samples": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["url", "summary"],
+            "properties": {
+              "url": { "type": "string" },
+              "summary": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+
+    "key_variables": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 2,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "impact", "observable_signals"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "impact": { "type": "string", "minLength": 1 },
+          "observable_signals": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+
+    "failure_modes": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["mode", "observable_signals"],
+        "properties": {
+          "mode": { "type": "string", "minLength": 1 },
+          "observable_signals": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+
+    "risk_attribution": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "enum": ["info", "interpretation", "time", "market_structure"]
+      }
+    },
+
+    "limitations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cannot_detect", "not_included"],
+      "properties": {
+        "cannot_detect": { "type": "array", "minItems": 2, "items": { "type": "string" } },
+        "not_included": {
+          "type": "array",
+          "minItems": 2,
+          "items": { "type": "string", "enum": ["no_bet_advice", "no_position_sizing"] }
+        }
+      }
+    },
+
+    "ai_vs_market": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["market_yes", "ai_yes_beta", "delta", "drivers"],
+      "properties": {
+        "market_yes": { "type": "number", "minimum": 0, "maximum": 100 },
+        "ai_yes_beta": { "type": "number", "minimum": 0, "maximum": 100 },
+        "delta": { "type": "number", "minimum": -100, "maximum": 100 },
+        "drivers": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 3,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  },
+
+  "$defs": {
+    "evidenceItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["claim", "source_type", "url", "time"],
+      "properties": {
+        "claim": { "type": "string", "minLength": 1 },
+        "source_type": {
+          "type": "string",
+          "enum": ["官方公告", "主流媒体", "社交讨论", "链上数据", "市场行为"]
+        },
+        "url": { "type": "string", "minLength": 1 },
+        "time": { "type": "string", "minLength": 1 }
+      }
+    },
+    "pricedItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["item", "source_type"],
+      "properties": {
+        "item": { "type": "string", "minLength": 1 },
+        "source_type": {
+          "type": "string",
+          "enum": ["官方公告", "主流媒体", "社交讨论", "链上数据", "市场行为"]
+        }
+      }
+    }
+  }
+}
+```
+
+---
