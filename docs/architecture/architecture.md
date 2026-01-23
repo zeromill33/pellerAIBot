@@ -15,6 +15,7 @@
 - 附录 G：SentimentProvider（NewsData.io）`docs/architecture/providers/sentiment-newsdata.md`
 - 附录 H：SentimentProvider（Perigon）`docs/architecture/providers/sentiment-perigon.md`
 - 附录 I：Provider 通用实现规范 `docs/architecture/providers/provider-guidelines.md`
+- 附录 J：Polymarket Pricing API `docs/architecture/providers/polymarket-pricing.md`
 
 ## 相关补充
 - `docs/architecture/source-tree.md`

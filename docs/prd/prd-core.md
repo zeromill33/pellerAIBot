@@ -94,6 +94,7 @@ MVP 不替用户下注，而是让用户拥有“投研终端级”的信息处�
 
 - **Gamma API**：市场/事件元数据（标题、描述、结算条件原文、截止时间、赔率、clob token ids）
 - **CLOB API**：订单簿深度、价差/中间价、价格相关数据（用于“盘口结构、流动性、市场行为”）
+- **Pricing API**：tokenId 最新价/中位价/历史价格（用于价格信号与 priced-in vs new 判断）
 
 #### A1.2 外部资讯：Tavily（已选定）
 
@@ -123,6 +124,7 @@ MVP 不替用户下注，而是让用户拥有“投研终端级”的信息处�
 2) **Market Context Builder**
    - Gamma 拉取：title/description/resolution_rules_raw/end_time/market_odds/clob_token_ids
    - CLOB 拉取：book_top_levels、spread、midpoint、价格变化（如 24h）
+   - Pricing 拉取：latest/midpoint/24h 历史价格；代码侧计算 price signals（change/volatility/range/slope/spike）
 
 3) **Tavily Multi-lane Search**
    - 基于标题/描述/截止时间生成 A/B/C 三车道 query
@@ -227,13 +229,14 @@ MVP 不替用户下注，而是让用户拥有“投研终端级”的信息处�
 ### P0 必交付
 
 1) Polymarket 链接输入 → slug 解析 → Gamma/CLOB 拉取  
-2) Tavily 多车道检索（A/B/C + D 条件触发，多类型查询）+ 结果归一化与去重  
-3) LLM 输出 Report v1 JSON（0–100 概率）  
-4) Validator 质量闸门（阻断机制）  
-5) JSON 渲染为 TG 文案  
-6) Event/Evidence/Report 三表落地（Notion/Sheet，发布前必须落地）  
-7) TG Bot 推送到 Channel（可配置自动或运营确认）  
-8) 限流/重试策略（5min/1h）配置化  
+2) Pricing 拉取 tokenId 最新价/中位价/历史价格，并计算 price signals  
+3) Tavily 多车道检索（A/B/C + D 条件触发，多类型查询）+ 结果归一化与去重  
+4) LLM 输出 Report v1 JSON（0–100 概率）  
+5) Validator 质量闸门（阻断机制）  
+6) JSON 渲染为 TG 文案  
+7) Event/Evidence/Report 三表落地（Notion/Sheet，发布前必须落地）  
+8) TG Bot 推送到 Channel（可配置自动或运营确认）  
+9) 限流/重试策略（5min/1h）配置化  
 
 ### P1（不在 Week 1 强制）
 

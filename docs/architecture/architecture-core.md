@@ -90,7 +90,7 @@ flowchart LR
 ### 3.1 Provider 接口清单（概览）
 
 > Week 1 强调“交互闭环”，但外部依赖最容易变化，所以 Provider 必须“接口先行 + 实现可替换”。
-> **本节只给概览**，每个 Provider 的**可落地实现细节**（端点、鉴权、参数、返回、限流、失败语义、缓存策略、示例请求）统一放在文末 **附录 A–I**。
+> **本节只给概览**，每个 Provider 的**可落地实现细节**（端点、鉴权、参数、返回、限流、失败语义、缓存策略、示例请求）统一放在文末 **附录 A–J**。
 
 1) `MarketProvider`（Week 1：Polymarket）
 
@@ -100,29 +100,35 @@ flowchart LR
 - `getOrderBookSummary(tokenId) -> OrderBookSummary`
 - `getMarketOdds(marketId|tokenId) -> {yes,no}`（优先从 Gamma Market outcomePrices；必要时用 CLOB Pricing）
 
-2) `SearchProvider`（Week 1：Tavily）
+2) `PricingProvider`（Week 1：Polymarket Pricing API）
+
+- `getMarketPrice(tokenId) -> latest_price`
+- `getMidpointPrice(tokenId) -> midpoint_price`
+- `getPriceHistory(tokenId, window) -> PricePoint[]`
+
+3) `SearchProvider`（Week 1：Tavily）
 
 - `search(query, options) -> SearchResults`
 - `batchSearch(queries[], options) -> SearchResults[]`（可选：做 lane 并发）
 - 新闻上下文可替换 NewsData/Perigon 作为 News Provider，减少 Tavily 消耗
 
-3) `SentimentProvider`（Week 2+ 可开）
+4) `SentimentProvider`（Week 2+ 可开）
 
 - `getSentiment(query, window) -> SentimentSnapshot`
 - Week 1 默认关闭（见附录 G/H：NewsData / Perigon 方案对比与接口占位）
 
-4) `LLMProvider`
+5) `LLMProvider`
 
 - `generateReportV1(input) -> ReportV1Json`（强制结构化 JSON 输出）
 - `summarizeEvidence(input) -> EvidenceDigest`（可选）
 
-5) `Publisher`
+6) `Publisher`
 
 - `publishToChannel(text, options) -> {message_id}`
 - `editMessage(message_id, text) -> ...`（可选）
 - Week 1：`TelegramPublisher`
 
-6) `StorageAdapter`
+7) `StorageAdapter`
 
 - `upsertEvent(event)`
 - `appendEvidence(evidence[])`
@@ -133,9 +139,14 @@ flowchart LR
 ### 3.2 核心数据结构（内部标准化 DTO）
 
 - `MarketContext`（来自 Gamma）
-  - title, url, description, resolution_rules_raw, end_time, market_odds_yes/no, clob_token_ids, liquidity_proxy
+  - title, url, description, resolution_rules_raw, end_time, market_odds_yes/no, clob_token_ids, liquidity_proxy, price_context
 - `ClobSnapshot`（来自 CLOB）
   - spread, midpoint, book_top_levels, notable_walls, price_change_24h
+- `PriceContext`（来自 Pricing + 代码派生）
+  - latest_price, midpoint_price
+  - history_24h[{ts, price}]
+  - signals{change_1h, change_4h, change_24h, volatility_24h, range_high_24h, range_low_24h, trend_slope_24h, spike_flag}
+  - 计算口径见附录 J
 - `TavilyLaneResult`
   - lane(A/B/C/D), query, results[{title,url,domain,published_at,raw_content}]
 - `EvidenceCandidate`
@@ -153,15 +164,16 @@ flowchart LR
 1) URL → slug
 2) 拉取 Gamma Event → `MarketContext`（必须拿到 resolution_rules_raw）
 3) 拉取 CLOB Book → `ClobSnapshot`
-4) QueryStrategy 生成 A/B/C；D 满足条件时生成 2–3 类查询
-5) Tavily 多车道检索（默认 A/B/C；D 条件触发且执行 2–3 类 Query）
-6) EvidenceBuilder 去重、打标、产出 evidence_candidates
-7) LLMProvider 生成 Report v1 JSON
-8) Validator 校验（schema + 内容闸门）
-9) 若通过：StorageAdapter 落地三表（Event/Evidence/Report，status=ready）
-10) Renderer 生成 TG 文案并回写存储
-11) 按发布策略自动推送或等待运营确认；发布后更新 status/message_id
-12) 返回执行结果（成功/失败原因）
+4) 拉取 Pricing（最新价/中位价/历史）→ 计算价格派生指标 → 合并到 `MarketContext.price_context`
+5) QueryStrategy 生成 A/B/C；D 满足条件时生成 2–3 类查询
+6) Tavily 多车道检索（默认 A/B/C；D 条件触发且执行 2–3 类 Query）
+7) EvidenceBuilder 去重、打标、产出 evidence_candidates
+8) LLMProvider 生成 Report v1 JSON
+9) Validator 校验（schema + 内容闸门）
+10) 若通过：StorageAdapter 落地三表（Event/Evidence/Report，status=ready）
+11) Renderer 生成 TG 文案并回写存储
+12) 按发布策略自动推送或等待运营确认；发布后更新 status/message_id
+13) 返回执行结果（成功/失败原因）
 
 ### 4.2 多事件批处理（运营一次输入多个链接）
 
@@ -276,6 +288,17 @@ erDiagram
     number gamma_liquidity
     number book_depth_top10
     number spread
+    number price_latest
+    number price_midpoint
+    number price_change_1h
+    number price_change_4h
+    number price_change_24h
+    number price_volatility_24h
+    number price_range_low_24h
+    number price_range_high_24h
+    number price_trend_slope_24h
+    bool price_spike_flag
+    text price_history_24h_json
     datetime created_at
   }
 
@@ -449,6 +472,7 @@ erDiagram
 - 附录 G：SentimentProvider 方案 1 ——NewsData.io `docs/architecture/providers/sentiment-newsdata.md`
 - 附录 H：SentimentProvider 方案 2 ——Perigon `docs/architecture/providers/sentiment-perigon.md`
 - 附录 I：Provider 通用实现规范 `docs/architecture/providers/provider-guidelines.md`
+- 附录 J：Polymarket Pricing API ——token 价格数据 `docs/architecture/providers/polymarket-pricing.md`
 
 ## 16. Appendix：关键交互时序图（运营触发 /publish）
 

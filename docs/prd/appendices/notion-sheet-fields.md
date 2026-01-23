@@ -19,6 +19,17 @@
 | gamma_liquidity      | number      | Liquidity Proxy（可为空） |
 | book_depth_top10     | number      | Liquidity Proxy（可为空） |
 | spread               | number      | Liquidity Proxy（可为空） |
+| price_latest         | number      | 最新价（可为空）          |
+| price_midpoint       | number      | 中位价（可为空）          |
+| price_change_1h      | number      | 1h 价格变化（可为空）     |
+| price_change_4h      | number      | 4h 价格变化（可为空）     |
+| price_change_24h     | number      | 24h 价格变化（可为空）    |
+| price_volatility_24h | number      | 24h 波动率（可为空）      |
+| price_range_low_24h  | number      | 24h 低点（可为空）        |
+| price_range_high_24h | number      | 24h 高点（可为空）        |
+| price_trend_slope_24h| number      | 24h 趋势斜率（可为空）    |
+| price_spike_flag     | bool        | 24h 异常波动标记          |
+| price_history_24h_json | text      | 24h 历史价格序列（JSON，{ts,price}[]) |
 | created_at           | datetime    | 记录创建时间              |
 
 ## H2. Evidence 表字段

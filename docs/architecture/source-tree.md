@@ -27,6 +27,7 @@
 │  │  │  ├─ url.parse.step.ts              # url → slug
 │  │  │  ├─ market.fetch.step.ts           # Gamma 拉取 MarketContext（含 resolution_rules_raw）
 │  │  │  ├─ market.orderbook.fetch.step.ts # CLOB 拉取 ClobSnapshot（spread/mid/depth/walls）
+│  │  │  ├─ market.pricing.fetch.step.ts   # Pricing 拉取最新价/中位价/历史并生成价格信号
 │  │  │  ├─ query.plan.build.step.ts       # QueryStrategy：A/B/C（必要时 D）生成 query plan
 │  │  │  ├─ search.tavily.step.ts          # Tavily 多车道检索（含缓存、全局限流）
 │  │  │  ├─ evidence.build.step.ts         # EvidenceBuilder：去重/打标/novelty/stance（简版）
@@ -42,6 +43,7 @@
 │  │  ├─ polymarket/
 │  │  │  ├─ gamma.ts                       # Gamma API client：events/markets 映射成 MarketContext
 │  │  │  ├─ clob.ts                        # CLOB client：/book 等 → ClobSnapshot + 墙识别 proxy
+│  │  │  ├─ pricing.ts                     # Pricing client：最新价/中位价/历史价格
 │  │  │  ├─ mapper.ts                      # API 响应 → DTO（统一字段口径）
 │  │  │  └─ index.ts                       # PolymarketProvider implements MarketProvider
 │  │  │
@@ -164,4 +166,3 @@
 如果要极简落地，可以先只保留：
 - `src/bot/`、`src/orchestrator/`、`src/providers/{polymarket,tavily,telegram,llm}`、`src/validator/`、`src/renderer/`、`src/storage/sqlite/`
 其余（exporters、cache/、fixtures/）都可后补。
-

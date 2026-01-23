@@ -18,7 +18,8 @@
 ### Stories
 - E2-S1 Gamma 拉取事件与市场元数据并映射为 MarketContext
 - E2-S2 CLOB 拉取订单簿摘要并映射为 ClobSnapshot
-- E2-S3 计算 Liquidity Proxy 并合并到上下文
+- E2-S3 获取 tokenId 价格信息（最新价/中位价/历史价格）
+- E2-S4 计算 Liquidity Proxy 并合并到上下文
 
 ## Epic 3：Tavily 多车道检索
 目标：产出可追溯且足量的外部证据候选。
