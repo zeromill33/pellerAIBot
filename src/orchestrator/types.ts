@@ -82,3 +82,23 @@ export type MarketContext = {
   outcomePrices?: number[];
   clobTokenIds?: string[];
 };
+
+export type OrderBookLevel = {
+  side: "bid" | "ask";
+  price: number;
+  size: number;
+};
+
+export type NotableWall = OrderBookLevel & {
+  multiple: number;
+};
+
+export type ClobSnapshot = {
+  spread: number | null;
+  midpoint: number | null;
+  book_top_levels: OrderBookLevel[];
+  notable_walls: NotableWall[];
+  price_change_24h?: number;
+};
+
+export type OrderBookSummary = ClobSnapshot;

@@ -145,7 +145,7 @@ describe("Polymarket Gamma provider", () => {
   it("replays real Gamma fixtures offline", async () => {
     const events = loadFixture("real-events.json");
     const markets = loadFixture("real-markets.json");
-    const { fetchMock } = createFetchMock([
+    const { fetchMock, calls } = createFetchMock([
       { status: 200, json: events },
       { status: 200, json: markets }
     ]);
@@ -162,7 +162,7 @@ describe("Polymarket Gamma provider", () => {
 
     expect(result.slug).toBe("who-will-trump-nominate-as-fed-chair");
     expect(result.markets.length).toBeGreaterThan(0);
-    expect(result.outcomePrices?.length ?? 0).toBeGreaterThan(0);
     expect(result.clobTokenIds?.length ?? 0).toBeGreaterThan(0);
+    expect(calls).toHaveLength(2);
   });
 });

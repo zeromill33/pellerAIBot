@@ -203,6 +203,47 @@ function extractArray(payload: unknown, keys: string[]): unknown[] | null {
   return null;
 }
 
+function extractEventMarkets(record: Record<string, unknown>): unknown[] | null {
+  return extractArray(record, ["markets", "marketIds", "market_ids"]);
+}
+
+function hasEventReference(record: Record<string, unknown>): boolean {
+  const direct =
+    toOptionalString(record.event_id) || toOptionalString(record.eventId);
+  if (direct) {
+    return true;
+  }
+  const events = extractArray(record, ["events", "eventIds", "event_ids"]);
+  return Array.isArray(events);
+}
+
+function matchesEventId(record: Record<string, unknown>, eventId: string): boolean {
+  const direct =
+    toOptionalString(record.event_id) || toOptionalString(record.eventId);
+  if (direct && direct === eventId) {
+    return true;
+  }
+  const events = extractArray(record, ["events", "eventIds", "event_ids"]);
+  if (!events) {
+    return false;
+  }
+  for (const event of events) {
+    if (typeof event === "string" && event === eventId) {
+      return true;
+    }
+    if (event && typeof event === "object") {
+      const eventRecord = event as Record<string, unknown>;
+      const nestedId =
+        toOptionalString(eventRecord.id) ||
+        toOptionalString(eventRecord.event_id);
+      if (nestedId === eventId) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 function isRetryableStatus(status: number): boolean {
   return status === 429 || (status >= 500 && status <= 599);
 }
@@ -354,6 +395,7 @@ function mapGammaEvent(raw: unknown): {
   description?: string;
   resolutionRules?: string;
   endTime?: string;
+  marketsRaw?: unknown[];
 } {
   if (!raw || typeof raw !== "object") {
     throw new Error("Invalid event payload");
@@ -378,6 +420,7 @@ function mapGammaEvent(raw: unknown): {
     toOptionalString(record.end_time) ||
     toOptionalString(record.endDate) ||
     toOptionalString(record.end_date);
+  const marketsRaw = extractEventMarkets(record);
 
   return {
     eventId,
@@ -385,7 +428,8 @@ function mapGammaEvent(raw: unknown): {
     title,
     description,
     resolutionRules,
-    endTime
+    endTime,
+    marketsRaw: marketsRaw ?? undefined
   };
 }
 
@@ -531,10 +575,35 @@ export function createGammaProvider(
       }
     });
 
-    const { markets, primaryMarket } = await listMarketsByEvent(
-      event.eventId,
-      selection
-    );
+    let marketsResult: ListMarketsResult;
+    try {
+      marketsResult = await listMarketsByEvent(event.eventId, selection);
+    } catch (error) {
+      if (event.marketsRaw && event.marketsRaw.length > 0) {
+        const mappedMarkets: GammaMarket[] = [];
+        for (const market of event.marketsRaw) {
+          try {
+            mappedMarkets.push(mapGammaMarket(market));
+          } catch {
+            continue;
+          }
+        }
+        if (mappedMarkets.length > 0) {
+          try {
+            const primaryMarket = selectPrimaryMarket(mappedMarkets, selection);
+            marketsResult = { markets: mappedMarkets, primaryMarket };
+          } catch {
+            throw error;
+          }
+        } else {
+          throw error;
+        }
+      } else {
+        throw error;
+      }
+    }
+
+    const { markets, primaryMarket } = marketsResult;
 
     return {
       event_id: event.eventId,
@@ -579,15 +648,27 @@ export function createGammaProvider(
             { eventId }
           );
         }
-        if (rawMarkets.length === 0) {
+        const shouldFilter = rawMarkets.some(
+          (market) => market && typeof market === "object" && hasEventReference(market as Record<string, unknown>)
+        );
+        const filteredMarkets = shouldFilter
+          ? rawMarkets.filter(
+              (market) =>
+                market &&
+                typeof market === "object" &&
+                matchesEventId(market as Record<string, unknown>, eventId)
+            )
+          : rawMarkets;
+
+        if (filteredMarkets.length === 0) {
           throw createProviderError(
             ERROR_CODES.PROVIDER_PM_GAMMA_MARKETS_EMPTY,
             "Gamma markets response empty",
-            { eventId }
+            { eventId, total: rawMarkets.length }
           );
         }
         try {
-          return rawMarkets.map((market) => mapGammaMarket(market));
+          return filteredMarkets.map((market) => mapGammaMarket(market));
         } catch (error) {
           throw createProviderError(
             ERROR_CODES.PROVIDER_PM_GAMMA_MARKET_INVALID,
