@@ -1,0 +1,11 @@
+[
+  {
+    "id": "market_456",
+    "question": "Who will Trump nominate as Fed Chair?",
+    "outcomes": ["Yes", "No"],
+    "outcomePrices": ["0.6", "0.4"],
+    "clobTokenIds": ["token_yes", "token_no"],
+    "volume": "12345.67",
+    "liquidity": "890.1"
+  }
+]

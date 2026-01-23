@@ -1,0 +1,10 @@
+[
+  {
+    "id": "event_123",
+    "slug": "who-will-trump-nominate-as-fed-chair",
+    "title": "Who will Trump nominate as Fed Chair?",
+    "description": "Sample event description",
+    "resolution_rules": "Resolved based on official announcement.",
+    "endDate": "2025-06-01T00:00:00Z"
+  }
+]

@@ -1,0 +1,8 @@
+[
+  {
+    "id": "market_789",
+    "question": "Who will Trump nominate as Fed Chair?",
+    "outcomes": ["Yes", "No"],
+    "outcomePrices": ["0.5", "0.5"]
+  }
+]

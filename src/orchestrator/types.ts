@@ -59,3 +59,26 @@ export type PublishBatchResult = UrlParseResult & {
   failures: PublishItemFailure[];
   summary: PublishBatchSummary;
 };
+
+export type GammaMarket = {
+  market_id: string;
+  question?: string;
+  outcomes: string[];
+  outcomePrices: number[];
+  clobTokenIds: string[];
+  volume?: number;
+  liquidity?: number;
+};
+
+export type MarketContext = {
+  event_id: string;
+  slug: string;
+  title: string;
+  description?: string;
+  resolution_rules_raw?: string;
+  end_time?: string;
+  markets: GammaMarket[];
+  primary_market_id?: string;
+  outcomePrices?: number[];
+  clobTokenIds?: string[];
+};
