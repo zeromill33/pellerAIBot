@@ -1,7 +1,8 @@
 import { guardPublishUrls } from "../guard.js";
+import { toErrorReceipt } from "../../orchestrator/errors.js";
 import { triggerPublishBatch } from "../../orchestrator/index.js";
 import { buildRequestId } from "../../utils/id.js";
-import type { PublishBatchResult } from "../../orchestrator/types.js";
+import type { ErrorReceipt, PublishBatchResult } from "../../orchestrator/types.js";
 
 export type PublishReceiptSuccess = {
   event_slug: string;
@@ -11,20 +12,12 @@ export type PublishReceiptSuccess = {
 export type PublishReceiptFailure = {
   event_slug: string;
   run_id: string;
-  error: {
-    code: string;
-    message: string;
-    retryable: boolean;
-  };
+  error: ErrorReceipt;
 };
 
 export type PublishReceiptInvalidUrl = {
   url: string;
-  error: {
-    code: string;
-    message: string;
-    retryable: boolean;
-  };
+  error: ErrorReceipt;
 };
 
 export type PublishBatchReceipt = {
@@ -39,7 +32,9 @@ export type PublishCommandResult = PublishBatchResult & {
   receipt: PublishBatchReceipt;
 };
 
-function buildPublishReceipt(result: PublishBatchResult): PublishBatchReceipt {
+export function buildPublishReceipt(
+  result: PublishBatchResult
+): PublishBatchReceipt {
   return {
     request_id: result.request_id,
     summary: result.summary,
@@ -50,19 +45,11 @@ function buildPublishReceipt(result: PublishBatchResult): PublishBatchReceipt {
     failures: result.failures.map((item) => ({
       event_slug: item.event_slug,
       run_id: item.run_id,
-      error: {
-        code: item.error.code,
-        message: item.error.message,
-        retryable: item.error.retryable
-      }
+      error: toErrorReceipt(item.error)
     })),
     invalid_urls: result.invalid_urls.map((item) => ({
       url: item.url,
-      error: {
-        code: item.error.code,
-        message: item.error.message,
-        retryable: item.error.retryable
-      }
+      error: toErrorReceipt(item.error)
     }))
   };
 }

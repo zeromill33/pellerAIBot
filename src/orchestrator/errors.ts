@@ -1,10 +1,28 @@
-export type ErrorCategory = "VALIDATION" | "INTERNAL";
+import type { ErrorReceipt } from "./types.js";
+
+export type ErrorCategory =
+  | "VALIDATION"
+  | "PROVIDER"
+  | "RATE_LIMIT"
+  | "STORE"
+  | "RENDER"
+  | "PUBLISH"
+  | "LLM"
+  | "INTERNAL"
+  | "UNKNOWN";
+
+export type ErrorSuggestion = {
+  action: "retry" | "supplement_search" | "enable_lane";
+  preferred_lane?: "C" | "D";
+  message?: string;
+};
 
 export class AppError extends Error {
   readonly code: string;
   readonly category: ErrorCategory;
   readonly retryable: boolean;
   readonly details?: Record<string, unknown>;
+  readonly suggestion?: ErrorSuggestion;
 
   constructor(params: {
     code: string;
@@ -12,6 +30,7 @@ export class AppError extends Error {
     category: ErrorCategory;
     retryable: boolean;
     details?: Record<string, unknown>;
+    suggestion?: ErrorSuggestion;
   }) {
     super(params.message);
     this.name = "AppError";
@@ -19,6 +38,7 @@ export class AppError extends Error {
     this.category = params.category;
     this.retryable = params.retryable;
     this.details = params.details;
+    this.suggestion = params.suggestion;
   }
 }
 
@@ -35,6 +55,18 @@ export function createAppError(params: {
   category: ErrorCategory;
   retryable: boolean;
   details?: Record<string, unknown>;
+  suggestion?: ErrorSuggestion;
 }): AppError {
   return new AppError(params);
+}
+
+export function toErrorReceipt(error: AppError): ErrorReceipt {
+  return {
+    code: error.code,
+    message: error.message,
+    category: error.category,
+    retryable: error.retryable,
+    details: error.details,
+    suggestion: error.suggestion
+  };
 }

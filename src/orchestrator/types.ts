@@ -1,4 +1,13 @@
-import type { AppError } from "./errors.js";
+import type { AppError, ErrorCategory, ErrorSuggestion } from "./errors.js";
+
+export type ErrorReceipt = {
+  code: string;
+  message: string;
+  category: ErrorCategory;
+  retryable: boolean;
+  details?: Record<string, unknown>;
+  suggestion?: ErrorSuggestion;
+};
 
 export type InvalidUrlResult = {
   url: string;
