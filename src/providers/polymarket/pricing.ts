@@ -17,6 +17,7 @@ type PricingProviderOptions = {
   timeoutMs?: number;
   retries?: number;
   retryBaseDelayMs?: number;
+  priceSide?: "buy" | "sell";
   cacheTtlPriceMs?: number;
   cacheTtlMidpointMs?: number;
   cacheTtlHistoryMs?: number;
@@ -460,6 +461,7 @@ export function createPricingProvider(
     retries: options.retries ?? DEFAULT_OPTIONS.retries,
     retryBaseDelayMs:
       options.retryBaseDelayMs ?? DEFAULT_OPTIONS.retryBaseDelayMs,
+    priceSide: options.priceSide ?? "buy",
     cacheTtlPriceMs: options.cacheTtlPriceMs ?? DEFAULT_OPTIONS.cacheTtlPriceMs,
     cacheTtlMidpointMs:
       options.cacheTtlMidpointMs ?? DEFAULT_OPTIONS.cacheTtlMidpointMs,
@@ -483,8 +485,9 @@ export function createPricingProvider(
 
     const cacheKey = `pm:price:${tokenId}`;
     return await cache.getOrSet(cacheKey, config.cacheTtlPriceMs, async () => {
-      const url = buildPricingUrl(config.baseUrl, "/prices", {
-        token_id: tokenId
+      const url = buildPricingUrl(config.baseUrl, "/price", {
+        token_id: tokenId,
+        side: config.priceSide
       });
       const payload = await safeFetchJson(url, config);
       const price = extractNumericField(payload, [
@@ -556,7 +559,7 @@ export function createPricingProvider(
 
     return await cache.getOrSet(cacheKey, config.cacheTtlHistoryMs, async () => {
       const url = buildPricingUrl(config.baseUrl, "/prices-history", {
-        token_id: tokenId,
+        market: tokenId,
         window: `${windowHours}h`,
         interval: `${intervalHours}h`
       });

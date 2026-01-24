@@ -10,6 +10,9 @@ coverage/
 *.log
 *.tsbuildinfo
 
+# E2E temp outputs
+tests/e2e/tmp/
+
 # Env files (keep examples)
 .env
 .env.*

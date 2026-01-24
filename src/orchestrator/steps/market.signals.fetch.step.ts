@@ -6,6 +6,7 @@ import type {
   PriceContext,
   PriceSignals
 } from "../types.js";
+import { AppError } from "../errors.js";
 import type { ClobProvider } from "../../providers/polymarket/clob.js";
 import type { PricingProvider, PriceHistoryOptions } from "../../providers/polymarket/pricing.js";
 import { createClobProvider } from "../../providers/polymarket/clob.js";
@@ -168,11 +169,19 @@ export async function fetchMarketSignals(
         clobSnapshot = await clobProvider.getOrderBookSummary(tokenId);
       } catch (error) {
         lastError = error;
+        const appError = error instanceof AppError ? error : undefined;
+        const status =
+          appError && typeof appError.details?.status === "number"
+            ? appError.details.status
+            : undefined;
         console.warn({
           message: "market_signal_clob_failed",
           market_id: market.market_id,
           token_id: tokenId,
-          error: error instanceof Error ? error.message : String(error)
+          error: error instanceof Error ? error.message : String(error),
+          error_code: appError?.code,
+          error_category: appError?.category,
+          status
         });
       }
 
@@ -184,11 +193,19 @@ export async function fetchMarketSignals(
         );
       } catch (error) {
         lastError = error;
+        const appError = error instanceof AppError ? error : undefined;
+        const status =
+          appError && typeof appError.details?.status === "number"
+            ? appError.details.status
+            : undefined;
         console.warn({
           message: "market_signal_pricing_failed",
           market_id: market.market_id,
           token_id: tokenId,
-          error: error instanceof Error ? error.message : String(error)
+          error: error instanceof Error ? error.message : String(error),
+          error_code: appError?.code,
+          error_category: appError?.category,
+          status
         });
         priceContext = buildPriceFailureContext(
           tokenId,

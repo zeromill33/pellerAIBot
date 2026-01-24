@@ -35,6 +35,33 @@ function loadFixture(name: string) {
 }
 
 describe("createPricingProvider", () => {
+  it("uses price endpoint with side and history market param", async () => {
+    const calls: string[] = [];
+    const pricePayload = loadFixture("pricing-market-price.json");
+    const historyPayload = loadFixture("pricing-history.json");
+    const fetch = async (input: string) => {
+      calls.push(input);
+      if (input.includes("/prices-history")) {
+        return createMockResponse({ status: 200, payload: historyPayload });
+      }
+      return createMockResponse({ status: 200, payload: pricePayload });
+    };
+    const provider = createPricingProvider({
+      fetch,
+      retries: 0,
+      sleep: async () => {}
+    });
+
+    await provider.getMarketPrice("token-yes");
+    await provider.getPriceHistory("token-yes", { windowHours: 24, intervalHours: 1 });
+
+    expect(calls[0]).toContain("/price?");
+    expect(calls[0]).toContain("token_id=token-yes");
+    expect(calls[0]).toContain("side=buy");
+    expect(calls[1]).toContain("/prices-history?");
+    expect(calls[1]).toContain("market=token-yes");
+  });
+
   it("maps market price response", async () => {
     const payload = loadFixture("pricing-market-price.json");
     const fetch = async () => createMockResponse({ status: 200, payload });
