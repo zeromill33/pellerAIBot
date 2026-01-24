@@ -81,6 +81,7 @@ export type MarketContext = {
   primary_market_id?: string;
   outcomePrices?: number[];
   clobTokenIds?: string[];
+  price_context?: PriceContext;
 };
 
 export type OrderBookLevel = {
@@ -102,3 +103,33 @@ export type ClobSnapshot = {
 };
 
 export type OrderBookSummary = ClobSnapshot;
+
+export type PricePoint = {
+  ts: number;
+  price: number;
+};
+
+export type PriceSignals = {
+  change_1h: number | null;
+  change_4h: number | null;
+  change_24h: number | null;
+  volatility_24h: number | null;
+  range_high_24h: number | null;
+  range_low_24h: number | null;
+  trend_slope_24h: number | null;
+  spike_flag: boolean | null;
+};
+
+export type PriceHistoryWarning = {
+  code: "PRICE_HISTORY_INSUFFICIENT";
+  message: string;
+};
+
+export type PriceContext = {
+  token_id: string;
+  latest_price: number | null;
+  midpoint_price: number | null;
+  history_24h: PricePoint[];
+  signals: PriceSignals;
+  history_warning?: PriceHistoryWarning;
+};

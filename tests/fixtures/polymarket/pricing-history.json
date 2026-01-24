@@ -1,0 +1,7 @@
+{
+  "history": [
+    { "timestamp": 1700000000, "price": 0.5 },
+    { "timestamp": 1700003600, "price": 0.51 },
+    { "timestamp": 1700007200, "price": 0.52 }
+  ]
+}

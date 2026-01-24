@@ -1,0 +1,49 @@
+schema: 1
+story: "2.3"
+story_title: "获取 tokenId 价格信息（最新价/中位价/历史价格）"
+gate: PASS
+status_reason: "实现与测试覆盖满足主要 AC，未发现阻断性问题；AC5/AC7 通过人工检查。"
+reviewer: "Quinn (Test Architect)"
+updated: "2026-01-24T02:36:00Z"
+
+waiver: { active: false }
+
+top_issues: []
+
+risk_summary:
+  totals: { critical: 0, high: 0, medium: 0, low: 0 }
+  recommendations:
+    must_fix: []
+    monitor: []
+
+quality_score: 100
+expires: "2026-02-07T02:36:00Z"
+
+evidence:
+  tests_reviewed: 8
+  risks_identified: 0
+  trace:
+    ac_covered: [1, 2, 3, 4, 6, 8, 9, 10, 11]
+    ac_gaps: [5, 7]
+
+nfr_validation:
+  security:
+    status: PASS
+    notes: "未引入鉴权或敏感数据处理变更。"
+  performance:
+    status: PASS
+    notes: "信号计算为 O(n)，并有缓存与重试控制。"
+  reliability:
+    status: PASS
+    notes: "覆盖 429/字段缺失/历史不足/重采样场景。"
+  maintainability:
+    status: PASS
+    notes: "Provider 与 step 分层清晰，类型约束完整。"
+
+recommendations:
+  immediate: []
+  future:
+    - action: "为 prompt 变更增加轻量校验或快照测试"
+      refs: ["prompts/report_v1_generate.prompt.txt"]
+    - action: "补充价格字段落库的存储层测试"
+      refs: ["migrations/003_add_price_fields.sql"]
