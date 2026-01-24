@@ -209,12 +209,11 @@ function computePriceSignals(history: PricePoint[]): {
   };
 }
 
-export async function fetchMarketPricing(
-  input: PricingStepInput,
-  options: PricingStepOptions = {}
-): Promise<PricingStepOutput> {
-  const tokenId = selectTokenId(input.market_context);
-  const provider = options.provider ?? createPricingProvider();
+export async function buildPriceContext(
+  tokenId: string,
+  provider: PricingProvider,
+  options: PriceHistoryOptions = {}
+): Promise<PriceContext> {
   const latestPrice = await provider.getMarketPrice(tokenId);
   const midpointPrice = await provider.getMidpointPrice(tokenId);
   const history = await provider.getPriceHistory(tokenId, options);
@@ -231,6 +230,17 @@ export async function fetchMarketPricing(
   if (warning) {
     priceContext.history_warning = warning;
   }
+
+  return priceContext;
+}
+
+export async function fetchMarketPricing(
+  input: PricingStepInput,
+  options: PricingStepOptions = {}
+): Promise<PricingStepOutput> {
+  const tokenId = selectTokenId(input.market_context);
+  const provider = options.provider ?? createPricingProvider();
+  const priceContext = await buildPriceContext(tokenId, provider, options);
 
   return {
     market_context: {

@@ -54,10 +54,14 @@ describe("createClobProvider", () => {
       { side: "ask", price: 0.58, size: 1 }
     ]);
     expect(snapshot.notable_walls).toHaveLength(1);
-    expect(snapshot.notable_walls[0].side).toBe("bid");
-    expect(snapshot.notable_walls[0].price).toBe(0.55);
-    expect(snapshot.notable_walls[0].size).toBe(1000);
-    expect(snapshot.notable_walls[0].multiple).toBeGreaterThan(5);
+    const [firstWall] = snapshot.notable_walls;
+    if (!firstWall) {
+      throw new Error("Expected notable wall");
+    }
+    expect(firstWall.side).toBe("bid");
+    expect(firstWall.price).toBe(0.55);
+    expect(firstWall.size).toBe(1000);
+    expect(firstWall.multiple).toBeGreaterThan(5);
   });
 
   it("retries on 429 responses using Retry-After", async () => {
@@ -103,6 +107,30 @@ describe("createClobProvider", () => {
     expect(snapshot.notable_walls).toEqual([]);
     expect(snapshot.spread).toBeNull();
     expect(snapshot.midpoint).toBeNull();
+  });
+
+  it("keeps one-sided order book with null spread", async () => {
+    const fetch = async () =>
+      createMockResponse({
+        status: 200,
+        payload: {
+          bids: [],
+          asks: [
+            { price: "0.99", size: "10" },
+            { price: "0.98", size: "5" }
+          ]
+        }
+      });
+    const provider = createClobProvider({ fetch, topLevels: 2 });
+
+    const snapshot = await provider.getOrderBookSummary("token-yes");
+
+    expect(snapshot.spread).toBeNull();
+    expect(snapshot.midpoint).toBeNull();
+    expect(snapshot.book_top_levels).toEqual([
+      { side: "ask", price: 0.98, size: 5 },
+      { side: "ask", price: 0.99, size: 10 }
+    ]);
   });
 
   it("throws when order book levels are malformed", async () => {

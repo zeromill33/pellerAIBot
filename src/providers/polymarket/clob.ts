@@ -403,7 +403,7 @@ export function createClobProvider(
       const bidsRaw = extractArray(payload, "bids");
       const asksRaw = extractArray(payload, "asks");
 
-      if (!bidsRaw || !asksRaw || bidsRaw.length === 0 || asksRaw.length === 0) {
+      if (!bidsRaw || !asksRaw) {
         return {
           spread: null,
           midpoint: null,
@@ -412,11 +412,15 @@ export function createClobProvider(
         };
       }
 
-      let bids: OrderBookLevel[];
-      let asks: OrderBookLevel[];
+      let bids: OrderBookLevel[] = [];
+      let asks: OrderBookLevel[] = [];
       try {
-        bids = toSortedLevels(bidsRaw, "bid", config.topLevels);
-        asks = toSortedLevels(asksRaw, "ask", config.topLevels);
+        if (bidsRaw.length > 0) {
+          bids = toSortedLevels(bidsRaw, "bid", config.topLevels);
+        }
+        if (asksRaw.length > 0) {
+          asks = toSortedLevels(asksRaw, "ask", config.topLevels);
+        }
       } catch (error) {
         throw createProviderError(
           ERROR_CODES.PROVIDER_PM_CLOB_BOOK_INVALID,
@@ -425,7 +429,7 @@ export function createClobProvider(
         );
       }
 
-      if (bids.length === 0 || asks.length === 0) {
+      if (bids.length === 0 && asks.length === 0) {
         return {
           spread: null,
           midpoint: null,
@@ -434,10 +438,19 @@ export function createClobProvider(
         };
       }
 
-      const bestBid = bids[0].price;
-      const bestAsk = asks[0].price;
-      const spread = bestAsk - bestBid;
-      const midpoint = (bestAsk + bestBid) / 2;
+      let spread: number | null = null;
+      let midpoint: number | null = null;
+      if (bids.length > 0 && asks.length > 0) {
+        const [bestBidLevel] = bids;
+        const [bestAskLevel] = asks;
+        if (bestBidLevel && bestAskLevel) {
+          const bestBid = bestBidLevel.price;
+          const bestAsk = bestAskLevel.price;
+          spread = bestAsk - bestBid;
+          midpoint = (bestAsk + bestBid) / 2;
+        }
+      }
+
       const bookTopLevels = [...bids, ...asks];
       const notableWalls = computeNotableWalls(bookTopLevels, config.wallMultiple);
 

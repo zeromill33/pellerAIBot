@@ -81,7 +81,11 @@ export type MarketContext = {
   primary_market_id?: string;
   outcomePrices?: number[];
   clobTokenIds?: string[];
+  clob_market_id_used?: string;
+  clob_token_id_used?: string;
+  market_signals?: MarketSignal[];
   price_context?: PriceContext;
+  liquidity_proxy?: LiquidityProxy;
 };
 
 export type OrderBookLevel = {
@@ -121,7 +125,7 @@ export type PriceSignals = {
 };
 
 export type PriceHistoryWarning = {
-  code: "PRICE_HISTORY_INSUFFICIENT";
+  code: "PRICE_HISTORY_INSUFFICIENT" | "PRICE_API_FAILED";
   message: string;
 };
 
@@ -132,4 +136,19 @@ export type PriceContext = {
   history_24h: PricePoint[];
   signals: PriceSignals;
   history_warning?: PriceHistoryWarning;
+};
+
+export type LiquidityProxy = {
+  gamma_liquidity: number | null;
+  book_depth_top10: number;
+  spread: number | null;
+  midpoint: number | null;
+  notable_walls: NotableWall[];
+};
+
+export type MarketSignal = {
+  market_id: string;
+  token_id: string;
+  clob_snapshot: ClobSnapshot;
+  price_context: PriceContext;
 };
