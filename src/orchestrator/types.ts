@@ -164,3 +164,17 @@ export type TavilyQueryLane = {
 export type TavilyQueryPlan = {
   lanes: TavilyQueryLane[];
 };
+
+export type TavilySearchResult = {
+  title: string;
+  url: string;
+  domain: string;
+  published_at?: string;
+  raw_content: string | null;
+};
+
+export type TavilyLaneResult = {
+  lane: TavilyLane;
+  query: string;
+  results: TavilySearchResult[];
+};

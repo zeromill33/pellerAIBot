@@ -1,0 +1,17 @@
+{
+  "results": [
+    {
+      "title": "Example headline",
+      "url": "https://example.com/news/item",
+      "raw_content": "Raw content A",
+      "published_date": "2025-01-02T00:00:00Z"
+    },
+    {
+      "title": "Another source",
+      "url": "https://news.example.org/article",
+      "content": "Fallback content",
+      "published_at": "2025-01-01T12:00:00Z",
+      "domain": "news.example.org"
+    }
+  ]
+}

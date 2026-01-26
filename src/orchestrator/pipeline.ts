@@ -5,21 +5,28 @@ import type {
   MarketContext,
   MarketSignal,
   PublishPipelineInput,
-  PublishPipelineResult
+  PublishPipelineResult,
+  TavilyLaneResult,
+  TavilyQueryPlan
 } from "./types.js";
 import { fetchMarketContext } from "./steps/market.fetch.step.js";
 import { fetchMarketOrderbook } from "./steps/market.orderbook.fetch.step.js";
 import { mergeLiquidityProxy } from "./steps/market.liquidity.proxy.step.js";
 import { fetchMarketSignals } from "./steps/market.signals.fetch.step.js";
+import { buildTavilyQueryPlan } from "./steps/query.plan.build.step.js";
+import { searchTavily } from "./steps/search.tavily.step.js";
 import type { GammaProvider } from "../providers/polymarket/gamma.js";
 import type { ClobProvider } from "../providers/polymarket/clob.js";
 import type { PricingProvider } from "../providers/polymarket/pricing.js";
+import type { TavilyProvider } from "../providers/tavily/index.js";
 
 type PublishPipelineContext = PublishPipelineInput & {
   market_context?: MarketContext;
   market_signals?: MarketSignal[];
   clob_snapshot?: ClobSnapshot;
   liquidity_proxy?: LiquidityProxy;
+  query_plan?: TavilyQueryPlan;
+  tavily_results?: TavilyLaneResult[];
 };
 
 type PipelineStep = {
@@ -51,6 +58,7 @@ type PipelineStepOptions = {
   gammaProvider?: Pick<GammaProvider, "getEventBySlug">;
   clobProvider?: ClobProvider;
   pricingProvider?: PricingProvider;
+  tavilyProvider?: TavilyProvider;
   marketSignalsTopMarkets?: number;
   marketSignalsWindowHours?: number;
   marketSignalsIntervalHours?: number;
@@ -162,6 +170,53 @@ function buildPublishPipelineSteps(
           clob_snapshot: ctx.clob_snapshot
         });
         return { ...ctx, market_context, liquidity_proxy };
+      }
+    },
+    {
+      id: "query.plan.build",
+      input_keys: ["MarketContext"],
+      output_keys: ["TavilyQueryPlan"],
+      run: async (ctx) => {
+        if (!ctx.market_context) {
+          throw createAppError({
+            code: ERROR_CODES.ORCH_PIPELINE_FAILED,
+            message: "Missing market_context for query.plan.build",
+            category: "INTERNAL",
+            retryable: false,
+            details: { event_slug: ctx.event_slug }
+          });
+        }
+        const { market_context, query_plan } = buildTavilyQueryPlan({
+          market_context: ctx.market_context
+        });
+        return { ...ctx, market_context, query_plan };
+      }
+    },
+    {
+      id: "search.tavily",
+      input_keys: ["MarketContext", "TavilyQueryPlan"],
+      output_keys: ["TavilyLaneResult"],
+      run: async (ctx) => {
+        if (!ctx.market_context || !ctx.query_plan) {
+          throw createAppError({
+            code: ERROR_CODES.STEP_TAVILY_QUERY_PLAN_MISSING,
+            message: "Missing query_plan for search.tavily",
+            category: "VALIDATION",
+            retryable: false,
+            details: { event_slug: ctx.event_slug }
+          });
+        }
+        const { market_context, query_plan, tavily_results } = await searchTavily(
+          {
+            request_id: ctx.request_id,
+            run_id: ctx.run_id,
+            event_slug: ctx.event_slug,
+            market_context: ctx.market_context,
+            query_plan: ctx.query_plan
+          },
+          { provider: options.tavilyProvider }
+        );
+        return { ...ctx, market_context, query_plan, tavily_results };
       }
     }
   ];

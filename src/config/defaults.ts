@@ -6,6 +6,10 @@ export const DEFAULT_TAVILY_CONFIG: TavilyConfig = {
     include_answer: false,
     auto_parameters: true
   },
+  rate_limit: {
+    qps: 2,
+    burst: 4
+  },
   lanes: {
     A_update: {
       search_depth: "basic",

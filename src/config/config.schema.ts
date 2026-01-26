@@ -16,6 +16,11 @@ export type TavilyDefaultParams = {
   auto_parameters: boolean;
 };
 
+export type TavilyRateLimitConfig = {
+  qps: number;
+  burst: number;
+};
+
 export type TavilyLaneConfig = {
   search_depth: TavilySearchDepth;
   max_results: number;
@@ -51,6 +56,7 @@ export type TavilyLaneSet = {
 export type TavilyConfig = {
   api_key?: string;
   default: TavilyDefaultParams;
+  rate_limit: TavilyRateLimitConfig;
   lanes: TavilyLaneSet;
 };
 
@@ -78,6 +84,19 @@ function normalizePositiveInt(
     throw new Error(`${label} must be a positive integer`);
   }
   return value;
+}
+
+function normalizeRateLimit(
+  value: TavilyRateLimitConfig | undefined,
+  fallback: TavilyRateLimitConfig
+): TavilyRateLimitConfig {
+  if (!value) {
+    return { ...fallback };
+  }
+  return {
+    qps: normalizePositiveInt(value.qps, fallback.qps, "rate_limit.qps"),
+    burst: normalizePositiveInt(value.burst, fallback.burst, "rate_limit.burst")
+  };
 }
 
 function normalizeSearchDepth(
@@ -279,6 +298,7 @@ export function validateTavilyConfig(
         defaults.default.auto_parameters
       )
     },
+    rate_limit: normalizeRateLimit(raw.rate_limit, defaults.rate_limit),
     lanes: {
       A_update: normalizeLaneConfig(
         defaults.lanes.A_update,

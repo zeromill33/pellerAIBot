@@ -59,6 +59,8 @@ describe("tavily config validation", () => {
     expect(config.default.include_raw_content).toBe(true);
     expect(config.default.include_answer).toBe(false);
     expect(config.default.auto_parameters).toBe(true);
+    expect(config.rate_limit.qps).toBe(2);
+    expect(config.rate_limit.burst).toBe(4);
     expect(config.lanes.A_update.search_depth).toBe("basic");
     expect(config.lanes.C_counter.search_depth).toBe("advanced");
   });
@@ -66,9 +68,12 @@ describe("tavily config validation", () => {
   it("allows config overrides", () => {
     const config = validateTavilyConfig({
       default: { include_raw_content: false },
+      rate_limit: { qps: 3, burst: 6 },
       lanes: { A_update: { max_results: 9 } }
     });
     expect(config.default.include_raw_content).toBe(false);
+    expect(config.rate_limit.qps).toBe(3);
+    expect(config.rate_limit.burst).toBe(6);
     expect(config.lanes.A_update.max_results).toBe(9);
   });
 });
