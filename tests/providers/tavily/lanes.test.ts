@@ -12,6 +12,13 @@ describe("buildTavilyLaneParams", () => {
     expect(params.auto_parameters).toBe(true);
   });
 
+  it("uses default chatter lane parameters", () => {
+    const params = buildTavilyLaneParams("D");
+    expect(params.search_depth).toBe("basic");
+    expect(params.max_results).toBe(3);
+    expect(params.time_range).toBe("7d");
+  });
+
   it("applies overrides from config", () => {
     const params = buildTavilyLaneParams("B", {
       default: { include_raw_content: false },

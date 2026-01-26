@@ -7,7 +7,7 @@ import type {
 } from "../../src/orchestrator/types.js";
 
 describe("searchTavily", () => {
-  it("executes A/B/C lanes and logs structured metadata", async () => {
+  it("executes A/B/C/D lanes and logs structured metadata", async () => {
     const provider = {
       searchLane: vi.fn(async (input) => {
         return {
@@ -22,8 +22,8 @@ describe("searchTavily", () => {
               raw_content: `Raw ${input.lane}`
             }
           ],
-          cache_hit: input.lane === "A",
-          rate_limited: input.lane === "C",
+          cache_hit: input.lane === "A" || input.query === "query D2",
+          rate_limited: input.lane === "C" || input.query === "query D2",
           latency_ms: 5
         };
       })
@@ -40,7 +40,8 @@ describe("searchTavily", () => {
         { lane: "A", query: "query A" },
         { lane: "B", query: "query B" },
         { lane: "C", query: "query C" },
-        { lane: "D", query: "query D" }
+        { lane: "D", query: "query D1" },
+        { lane: "D", query: "query D2" }
       ]
     };
 
@@ -69,10 +70,10 @@ describe("searchTavily", () => {
       const lanes = (result.tavily_results as TavilyLaneResult[]).map(
         (lane) => lane.lane
       );
-      expect(lanes).toEqual(["A", "B", "C"]);
-      expect(provider.searchLane).toHaveBeenCalledTimes(3);
-      expect(provider.searchLane).not.toHaveBeenCalledWith(
-        expect.objectContaining({ lane: "D" })
+      expect(lanes).toEqual(["A", "B", "C", "D", "D"]);
+      expect(provider.searchLane).toHaveBeenCalledTimes(5);
+      expect(provider.searchLane).toHaveBeenCalledWith(
+        expect.objectContaining({ lane: "D", query: "query D1" })
       );
 
       expect(logSpy).toHaveBeenCalled();
@@ -83,8 +84,24 @@ describe("searchTavily", () => {
       expect(logEntry.event_slug).toBe("event-1");
       expect(logEntry.provider).toBe("tavily");
       expect(logEntry.latency_ms).toBeGreaterThanOrEqual(0);
-      expect(logEntry.cache_hit).toMatchObject({ A: true, B: false, C: false });
-      expect(logEntry.rate_limited).toMatchObject({ A: false, B: false, C: true });
+      expect(logEntry.cache_hit).toMatchObject({
+        A: true,
+        B: false,
+        C: false,
+        D: true
+      });
+      expect(logEntry.rate_limited).toMatchObject({
+        A: false,
+        B: false,
+        C: true,
+        D: true
+      });
+      expect(logEntry.lane_query_count).toMatchObject({
+        A: 1,
+        B: 1,
+        C: 1,
+        D: 2
+      });
     } finally {
       logSpy.mockRestore();
     }

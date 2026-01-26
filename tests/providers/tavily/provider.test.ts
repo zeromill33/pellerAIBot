@@ -56,6 +56,80 @@ describe("createTavilyProvider", () => {
     expect(result.results[1]?.raw_content).toBe("Fallback content");
   });
 
+  it("returns empty results when tavily response is empty", async () => {
+    const fetch = async () =>
+      createMockResponse({ status: 200, payload: { results: [] } });
+    const provider = createTavilyProvider({
+      config: { api_key: "test_key", rate_limit: { qps: 10, burst: 10 } },
+      fetch,
+      now: () => 0,
+      sleep: async () => {}
+    });
+
+    const result = await provider.searchLane({
+      event_slug: "event-empty",
+      lane: "A",
+      query: "empty results"
+    });
+
+    expect(result.results).toHaveLength(0);
+  });
+
+  it("normalizes time_range before request", async () => {
+    const requests: Array<Record<string, unknown>> = [];
+    const fetch = async (_input: string, init?: RequestInit) => {
+      if (init?.body) {
+        requests.push(JSON.parse(init.body.toString()));
+      }
+      return createMockResponse({ status: 200, payload: fixture });
+    };
+    const provider = createTavilyProvider({
+      config: { api_key: "test_key", rate_limit: { qps: 10, burst: 10 } },
+      fetch,
+      now: () => 0,
+      sleep: async () => {}
+    });
+
+    await provider.searchLane({
+      event_slug: "event-time",
+      lane: "A",
+      query: "time range check"
+    });
+
+    expect(requests[0]?.time_range).toBe("week");
+  });
+
+  it("maps D lane results and caches chatter queries", async () => {
+    let calls = 0;
+    const fetch = async () => {
+      calls += 1;
+      return createMockResponse({ status: 200, payload: fixture });
+    };
+    const provider = createTavilyProvider({
+      config: { api_key: "test_key", rate_limit: { qps: 10, burst: 10 } },
+      fetch,
+      now: () => 0,
+      sleep: async () => {}
+    });
+
+    const first = await provider.searchLane({
+      event_slug: "event-d",
+      lane: "D",
+      query: "chatter query"
+    });
+    const second = await provider.searchLane({
+      event_slug: "event-d",
+      lane: "D",
+      query: "chatter query"
+    });
+
+    expect(first.results).toHaveLength(2);
+    expect(first.results[0]?.raw_content).toBe("Raw content A");
+    expect(calls).toBe(1);
+    expect(first.cache_hit).toBe(false);
+    expect(second.cache_hit).toBe(true);
+  });
+
   it("returns cache hit for repeated queries", async () => {
     let calls = 0;
     const fetch = async () => {

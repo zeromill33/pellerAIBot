@@ -2,6 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
+  buildPublishPipelineSteps,
   runPublishPipelineSteps,
   type PipelineStepLog,
   type PublishPipelineContext
@@ -13,9 +14,11 @@ import { createClobProvider } from "../../src/providers/polymarket/clob.js";
 import { createPricingProvider } from "../../src/providers/polymarket/pricing.js";
 
 // RUN_E2E=1 启用；TEST_LIVE=1 走真实 provider（需网络/必要密钥，默认走 fixtures）。
-// 可选：E2E_EVENT_URL 覆盖 URL，E2E_STOP_STEP 覆盖停止的 step，
+// 可选：E2E_EVENT_URL 覆盖 URL，E2E_STOP_STEP 覆盖停止的 step，E2E_FORCE_D=1 强制 D 车道，
+// 额外：E2E_EVENT_URL_D 指定“自然触发 D 车道”的 live 用例 URL，E2E_STOP_STEP_D 覆盖停止 step，
 // E2E_TOP_MARKETS 控制 market.signals 探测数量（默认 3），
-// E2E_SUMMARY_PATH 指定输出摘要文件路径（默认 tests/e2s/tmp/e2e-step-summary.json）。
+// E2E_SUMMARY_PATH 指定输出摘要文件路径（默认 tests/e2s/tmp/e2e-step-summary.json），
+// E2E_SUMMARY_PATH_D 指定 D 车道用例摘要路径（默认 tests/e2e/tmp/e2e-step-summary-dlane.json）。
 const describeE2E = process.env.RUN_E2E === "1" ? describe : describe.skip;
 
 type MockResponse = {
@@ -193,6 +196,24 @@ function buildStepSummary(
     };
   }
 
+  if (entry.step_id === "query.plan.build") {
+    return {
+      ...base,
+      result: {
+        lanes: context.query_plan?.lanes ?? []
+      }
+    };
+  }
+
+  if (entry.step_id === "search.tavily") {
+    return {
+      ...base,
+      result: {
+        tavily_results: context.tavily_results ?? []
+      }
+    };
+  }
+
   return { ...base, result: {} };
 }
 
@@ -208,7 +229,12 @@ describeE2E("publish pipeline e2e", () => {
   const defaultUrl =
     process.env.E2E_EVENT_URL ??
     "https://polymarket.com/event/who-will-trump-nominate-as-fed-chair";
-  const testTimeoutMs = process.env.TEST_LIVE === "1" ? 30000 : 5000;
+  const forceChatter = process.env.E2E_FORCE_D === "1";
+  const liveDLaneUrl = process.env.E2E_EVENT_URL_D ?? "";
+  const testTimeoutMs =
+    process.env.TEST_LIVE === "1" ? (forceChatter ? 60000 : 30000) : 5000;
+  const runLiveDLane =
+    process.env.TEST_LIVE === "1" && liveDLaneUrl.trim().length > 0;
 
   function collectClientErrors(entries: unknown[]): unknown[] {
     return entries.filter((entry) => {
@@ -244,7 +270,7 @@ describeE2E("publish pipeline e2e", () => {
           ? Number(process.env.E2E_TOP_MARKETS)
           : 3;
       try {
-        const stepOptions = useLive
+      const stepOptions = useLive
           ? {
             gammaProvider: createGammaProvider(),
             clobProvider: createClobProvider(),
@@ -257,6 +283,15 @@ describeE2E("publish pipeline e2e", () => {
             pricingProvider: createPricingFixtureProvider(),
             marketSignalsTopMarkets: topMarkets
           };
+        if (forceChatter) {
+          stepOptions.tavilyConfig = {
+            lanes: {
+              D_chatter: {
+                enabled: "always"
+              }
+            }
+          };
+        }
         const context = await runPublishPipelineSteps(
           {
             request_id: "req_e2e",
@@ -285,12 +320,19 @@ describeE2E("publish pipeline e2e", () => {
         expect(storageSnapshot.evidence).toHaveLength(1);
         expect(storageSnapshot.reports).toHaveLength(1);
 
-        expect(logs.map((entry) => entry.step_id)).toEqual([
-          "market.fetch",
-          "market.signals",
-          "market.orderbook.fetch",
-          "market.liquidity.proxy"
-        ]);
+        const expectedSteps = buildPublishPipelineSteps(stepOptions)
+          .map((step) => step.id)
+          .filter((stepId, index, list) => {
+            if (!stopStepId) {
+              return true;
+            }
+            const stopIndex = list.indexOf(stopStepId);
+            if (stopIndex < 0) {
+              return true;
+            }
+            return index <= stopIndex;
+          });
+        expect(logs.map((entry) => entry.step_id)).toEqual(expectedSteps);
         for (const entry of logs) {
           expect(entry.request_id).toBe("req_e2e");
           expect(entry.run_id).toBe("run_e2e");
@@ -325,6 +367,74 @@ describeE2E("publish pipeline e2e", () => {
         throw new Error(
           `Detected 4xx provider responses during E2E: ${JSON.stringify(clientErrors)}`
         );
+      }
+    },
+    testTimeoutMs
+  );
+
+  const itLiveDLane = runLiveDLane ? it : it.skip;
+  itLiveDLane(
+    "runs live pipeline and expects D lane to trigger",
+    async () => {
+      const logs: PipelineStepLog[] = [];
+      const stepSummaries: StepSummary[] = [];
+      const slug = resolveEventSlug(liveDLaneUrl);
+      const clock = createStepClock();
+      const stopStepId = process.env.E2E_STOP_STEP_D ?? "search.tavily";
+      const topMarkets =
+        process.env.E2E_TOP_MARKETS && Number.isFinite(Number(process.env.E2E_TOP_MARKETS))
+          ? Number(process.env.E2E_TOP_MARKETS)
+          : 3;
+
+      const context = await runPublishPipelineSteps(
+        {
+          request_id: "req_e2e_d",
+          run_id: "run_e2e_d",
+          event_slug: slug
+        },
+        {
+          stopStepId,
+          now: clock,
+          logStep: (entry, stepContext) => {
+            logs.push(entry);
+            stepSummaries.push(buildStepSummary(entry, stepContext));
+          },
+          stepOptions: {
+            gammaProvider: createGammaProvider(),
+            clobProvider: createClobProvider(),
+            pricingProvider: createPricingProvider(),
+            marketSignalsTopMarkets: topMarkets
+          }
+        }
+      );
+
+      const lanes = context.query_plan?.lanes ?? [];
+      const dLanes = lanes.filter((lane) => lane.lane === "D");
+      expect(dLanes.length).toBeGreaterThanOrEqual(2);
+
+      const tavilyResults = context.tavily_results ?? [];
+      const hasDLaneResults = tavilyResults.some((lane) => lane.lane === "D");
+      if (stopStepId === "search.tavily") {
+        expect(hasDLaneResults).toBe(true);
+      }
+
+      const summaryPayload = {
+        meta: {
+          request_id: "req_e2e_d",
+          run_id: "run_e2e_d",
+          event_slug: slug,
+          mode: "live",
+          stop_step: stopStepId,
+          generated_at: new Date().toISOString()
+        },
+        steps: stepSummaries
+      };
+      const summaryPath =
+        process.env.E2E_SUMMARY_PATH_D ??
+        "tests/e2e/tmp/e2e-step-summary-dlane.json";
+      writeSummaryFile(summaryPath, summaryPayload);
+      for (const summary of stepSummaries) {
+        console.info("[e2e][step][D]", summary.step_id, summary.result);
       }
     },
     testTimeoutMs

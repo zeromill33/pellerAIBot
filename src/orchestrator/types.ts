@@ -49,6 +49,7 @@ export type PublishPipelineInput = {
   request_id: string;
   run_id: string;
   event_slug: string;
+  evidence_candidates?: EvidenceCandidate[];
 };
 
 export type PublishPipelineResult = PublishItemSuccess | PublishItemFailure;
@@ -177,4 +178,8 @@ export type TavilyLaneResult = {
   lane: TavilyLane;
   query: string;
   results: TavilySearchResult[];
+};
+
+export type EvidenceCandidate = {
+  stance?: string;
 };

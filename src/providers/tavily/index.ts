@@ -112,6 +112,31 @@ class TokenBucketRateLimiter {
   }
 }
 
+function normalizeTavilyTimeRange(value: string): string {
+  const trimmed = value.trim().toLowerCase();
+  const accepted = new Set(["day", "week", "month", "year", "d", "w", "m", "y"]);
+  if (accepted.has(trimmed)) {
+    return trimmed;
+  }
+  const match = trimmed.match(/^(\d+)\s*d$/);
+  if (match) {
+    const days = Number(match[1]);
+    if (Number.isFinite(days)) {
+      if (days <= 1) {
+        return "day";
+      }
+      if (days <= 7) {
+        return "week";
+      }
+      if (days <= 31) {
+        return "month";
+      }
+      return "year";
+    }
+  }
+  return trimmed;
+}
+
 function toOptionalString(value: unknown): string | undefined {
   if (typeof value === "string") {
     const trimmed = value.trim();
@@ -185,10 +210,6 @@ function mapTavilyResults(payload: unknown): TavilySearchResult[] {
       published_at: publishedAt,
       raw_content: rawContent
     });
-  }
-
-  if (mapped.length === 0) {
-    throw new Error("No valid tavily results");
   }
 
   return mapped;
@@ -285,7 +306,7 @@ export function createTavilyProvider(
           include_raw_content: laneParams.include_raw_content,
           include_answer: laneParams.include_answer,
           auto_parameters: laneParams.auto_parameters,
-          time_range: laneParams.time_range
+          time_range: normalizeTavilyTimeRange(laneParams.time_range)
         };
         if (laneParams.include_domains && laneParams.include_domains.length > 0) {
           request.include_domains = laneParams.include_domains;

@@ -1,8 +1,22 @@
+import { validateTavilyConfig } from "../../config/config.schema.js";
+import type { TavilyChatterConfig, TavilyConfig } from "../../config/config.schema.js";
 import { createAppError, ERROR_CODES } from "../errors.js";
-import type { MarketContext, TavilyQueryLane, TavilyQueryPlan } from "../types.js";
+import type {
+  EvidenceCandidate,
+  MarketContext,
+  MarketSignal,
+  PriceContext,
+  TavilyQueryLane,
+  TavilyQueryPlan
+} from "../types.js";
 
 type QueryPlanBuildInput = {
+  request_id?: string;
+  run_id?: string;
   market_context: MarketContext;
+  market_signals?: MarketSignal[];
+  evidence_candidates?: EvidenceCandidate[];
+  tavily_config?: Partial<TavilyConfig>;
 };
 
 type QueryPlanBuildOutput = {
@@ -16,6 +30,7 @@ const MAX_OBJECT_WORDS = 12;
 const FALLBACK_SUBJECT = "event";
 const FALLBACK_OBJECT = "resolution";
 const FALLBACK_TIME_ANCHOR = "this week";
+const DISAGREEMENT_MIN_COUNT = 2;
 
 const ACTION_KEYWORDS = [
   "nominate",
@@ -168,7 +183,218 @@ function finalizeQuery(query: string): string {
   return normalized.slice(0, MAX_QUERY_CHARS).trim();
 }
 
-function buildLaneQueryPlan(context: MarketContext): TavilyQueryPlan {
+type BaseQueryPlan = {
+  lanes: TavilyQueryLane[];
+  topic_core: string;
+  event_keywords: string;
+};
+
+type ChatterTriggerSummary = {
+  odds_change_24h_pct: {
+    available: boolean;
+    value_pct: number | null;
+    threshold: number;
+    triggered: boolean;
+  };
+  social_category: {
+    available: boolean;
+    value: string | null;
+    eligible: string[];
+    triggered: boolean;
+  };
+  disagreement_insufficient: {
+    enabled: boolean;
+    evidence_available: boolean;
+    evidence_count: number | null;
+    threshold: number;
+    triggered: boolean;
+  };
+};
+
+type ChatterTriggerEvaluation = {
+  enabled: boolean;
+  mode: TavilyChatterConfig["enabled"];
+  reasons: string[];
+  triggers: ChatterTriggerSummary;
+};
+
+function resolvePriceContext(
+  context: MarketContext,
+  marketSignals: MarketSignal[] | undefined
+): PriceContext | null {
+  if (context.price_context) {
+    return context.price_context;
+  }
+  const signals = marketSignals ?? context.market_signals;
+  if (!signals || signals.length === 0) {
+    return null;
+  }
+  const primaryId = context.primary_market_id ?? context.clob_market_id_used;
+  let selected =
+    primaryId !== undefined
+      ? signals.find((signal) => signal.market_id === primaryId)
+      : undefined;
+  if (!selected && context.clob_token_id_used) {
+    selected = signals.find(
+      (signal) => signal.token_id === context.clob_token_id_used
+    );
+  }
+  return (selected ?? signals[0])?.price_context ?? null;
+}
+
+function normalizeCategory(value: string | undefined): string | null {
+  if (!value) {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed ? trimmed.toLowerCase() : null;
+}
+
+function buildEventKeywords(subjectText: string, fallbackText: string): string {
+  const candidate = subjectText || fallbackText || FALLBACK_SUBJECT;
+  const limited = limitWords(candidate, MAX_SUBJECT_WORDS);
+  return normalizeWhitespace(limited || FALLBACK_SUBJECT);
+}
+
+function applyTemplate(
+  template: string,
+  replacements: Record<string, string>
+): string {
+  let result = template;
+  for (const [key, value] of Object.entries(replacements)) {
+    result = result.replaceAll(`{${key}}`, value);
+  }
+  return finalizeQuery(result);
+}
+
+function buildChatterQueries(
+  config: TavilyChatterConfig,
+  replacements: Record<string, string>
+): TavilyQueryLane[] {
+  const seen = new Set<string>();
+  const lanes: TavilyQueryLane[] = [];
+
+  for (const query of config.queries) {
+    const rendered = applyTemplate(query.template, replacements);
+    if (!rendered) {
+      continue;
+    }
+    const key = rendered.toLowerCase();
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    lanes.push({ lane: "D", query: rendered });
+  }
+
+  return lanes.slice(0, 3);
+}
+
+function countDisagreementEvidence(candidates: EvidenceCandidate[]): number {
+  const conStances = new Set([
+    "supports_no",
+    "con",
+    "contra",
+    "against",
+    "negative",
+    "no"
+  ]);
+  return candidates.reduce((count, candidate) => {
+    const stance = candidate.stance?.trim().toLowerCase();
+    if (stance && conStances.has(stance)) {
+      return count + 1;
+    }
+    return count;
+  }, 0);
+}
+
+function evaluateChatterTriggers(
+  context: MarketContext,
+  config: TavilyChatterConfig,
+  evidenceCandidates: EvidenceCandidate[] | undefined,
+  marketSignals: MarketSignal[] | undefined
+): ChatterTriggerEvaluation {
+  const priceContext = resolvePriceContext(context, marketSignals);
+  const change24h = priceContext?.signals.change_24h;
+  const oddsAvailable = typeof change24h === "number";
+  const changePct = oddsAvailable ? Math.abs(change24h) * 100 : null;
+  const oddsTriggered =
+    oddsAvailable && changePct >= config.triggers.odds_change_24h_pct;
+
+  const category = normalizeCategory(context.category);
+  const eligibleCategories = config.triggers.social_categories
+    .map((entry) => normalizeCategory(entry))
+    .filter((entry): entry is string => Boolean(entry));
+  const socialTriggered = Boolean(
+    category &&
+      eligibleCategories.some(
+        (entry) => category === entry || category.includes(entry)
+      )
+  );
+
+  const disagreementEnabled = config.triggers.disagreement_insufficient;
+  const evidenceAvailable = Array.isArray(evidenceCandidates);
+  const evidenceCount = evidenceAvailable
+    ? countDisagreementEvidence(evidenceCandidates)
+    : null;
+  const disagreementTriggered =
+    disagreementEnabled &&
+    evidenceAvailable &&
+    evidenceCount < DISAGREEMENT_MIN_COUNT;
+
+  const reasons: string[] = [];
+  if (config.enabled === "always") {
+    reasons.push("always");
+  } else if (config.enabled === "never") {
+    reasons.push("never");
+  } else {
+    if (oddsTriggered) {
+      reasons.push("odds_change_24h");
+    }
+    if (socialTriggered) {
+      reasons.push("social_category");
+    }
+    if (disagreementTriggered) {
+      reasons.push("disagreement_insufficient");
+    }
+  }
+
+  const enabled =
+    config.enabled === "always"
+      ? true
+      : config.enabled === "never"
+        ? false
+        : reasons.length > 0;
+
+  return {
+    enabled,
+    mode: config.enabled,
+    reasons,
+    triggers: {
+      odds_change_24h_pct: {
+        available: oddsAvailable,
+        value_pct: changePct,
+        threshold: config.triggers.odds_change_24h_pct,
+        triggered: oddsTriggered
+      },
+      social_category: {
+        available: Boolean(category),
+        value: category,
+        eligible: eligibleCategories,
+        triggered: socialTriggered
+      },
+      disagreement_insufficient: {
+        enabled: disagreementEnabled,
+        evidence_available: evidenceAvailable,
+        evidence_count: evidenceCount,
+        threshold: DISAGREEMENT_MIN_COUNT,
+        triggered: disagreementTriggered
+      }
+    }
+  };
+}
+
+function buildLaneQueryPlan(context: MarketContext): BaseQueryPlan {
   const textParts = [
     context.title,
     context.description,
@@ -208,6 +434,7 @@ function buildLaneQueryPlan(context: MarketContext): TavilyQueryPlan {
       .filter(Boolean)
       .join(" ")
   );
+  const eventKeywords = buildEventKeywords(subjectText, fallbackText);
 
   const updateQuery = finalizeQuery(
     `${topicCore} latest update ${timeAnchor}`
@@ -239,13 +466,57 @@ function buildLaneQueryPlan(context: MarketContext): TavilyQueryPlan {
     });
   }
 
-  return { lanes };
+  return { lanes, topic_core: topicCore, event_keywords: eventKeywords };
 }
 
 export function buildTavilyQueryPlan(
   input: QueryPlanBuildInput
 ): QueryPlanBuildOutput {
-  const query_plan = buildLaneQueryPlan(input.market_context);
+  const basePlan = buildLaneQueryPlan(input.market_context);
+  const config = validateTavilyConfig(input.tavily_config ?? {});
+  const chatterConfig = config.lanes.D_chatter;
+  const evaluation = evaluateChatterTriggers(
+    input.market_context,
+    chatterConfig,
+    input.evidence_candidates,
+    input.market_signals
+  );
+  const replacements = {
+    event_keywords: basePlan.event_keywords,
+    topic_core: basePlan.topic_core
+  };
+  const chatterQueries = evaluation.enabled
+    ? buildChatterQueries(chatterConfig, replacements)
+    : [];
+  const chatterEnabled = evaluation.enabled && chatterQueries.length >= 2;
+  const reasons = chatterEnabled
+    ? evaluation.reasons
+    : evaluation.enabled
+      ? [...evaluation.reasons, "queries_insufficient"]
+      : evaluation.reasons;
+
+  const lanes = chatterEnabled
+    ? [...basePlan.lanes, ...chatterQueries]
+    : basePlan.lanes;
+
+  console.info({
+    message: "step.query.plan.build",
+    step_id: "query.plan.build",
+    request_id: input.request_id ?? null,
+    run_id: input.run_id ?? null,
+    event_slug: input.market_context.slug,
+    cache_hit: {},
+    rate_limited: {},
+    lane_d: {
+      enabled: chatterEnabled,
+      mode: evaluation.mode,
+      reasons,
+      query_count: chatterQueries.length,
+      triggers: evaluation.triggers
+    }
+  });
+
+  const query_plan: TavilyQueryPlan = { lanes };
   return { market_context: input.market_context, query_plan };
 }
 

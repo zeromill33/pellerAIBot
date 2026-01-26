@@ -1,0 +1,47 @@
+schema: 1
+story: "3.3"
+story_title: "Tavily D 车道条件触发与查询执行"
+gate: PASS
+status_reason: "D 车道触发逻辑、查询生成与执行路径均有测试覆盖，未发现阻断性问题。"
+reviewer: "Quinn (Test Architect)"
+updated: "2026-01-26T14:10:31Z"
+
+waiver: { active: false }
+
+top_issues: []
+
+risk_summary:
+  totals: { critical: 0, high: 0, medium: 0, low: 0 }
+  recommendations:
+    must_fix: []
+    monitor: []
+
+quality_score: 100
+expires: "2026-02-09T14:10:40Z"
+
+evidence:
+  tests_reviewed: 6
+  risks_identified: 0
+  trace:
+    ac_covered: [1, 2, 3, 4, 5, 6, 7, 8]
+    ac_gaps: []
+
+nfr_validation:
+  security:
+    status: PASS
+    notes: "未引入鉴权/敏感数据处理变更，密钥通过环境变量注入。"
+  performance:
+    status: PASS
+    notes: "D 车道额外请求受限流控制，live e2e 延迟在可接受范围。"
+  reliability:
+    status: PASS
+    notes: "触发条件与缓存/限流路径均有测试覆盖，空结果允许返回。"
+  maintainability:
+    status: PASS
+    notes: "step 与 provider 分层清晰，查询与触发逻辑集中。"
+
+recommendations:
+  immediate: []
+  future:
+    - action: "为自然触发 D 车道提供稳定的 live 事件或 fixture"
+      refs: ["tests/e2e/publish-pipeline.e2e.test.ts"]

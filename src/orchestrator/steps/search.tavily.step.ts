@@ -41,11 +41,13 @@ export async function searchTavily(
   options: SearchTavilyOptions = {}
 ): Promise<SearchTavilyOutput> {
   const lanes = input.query_plan?.lanes ?? [];
-  const eligibleLanes = lanes.filter(
+  const primaryLanes = lanes.filter(
     (lane) => lane.lane === "A" || lane.lane === "B" || lane.lane === "C"
   );
+  const chatterLanes = lanes.filter((lane) => lane.lane === "D");
+  const eligibleLanes = [...primaryLanes, ...chatterLanes];
 
-  if (eligibleLanes.length === 0) {
+  if (primaryLanes.length === 0) {
     throw createAppError({
       code: ERROR_CODES.STEP_TAVILY_QUERY_PLAN_MISSING,
       message: "Missing A/B/C tavily lanes",
@@ -62,6 +64,7 @@ export async function searchTavily(
   const cacheHit: Record<string, boolean> = {};
   const rateLimited: Record<string, boolean> = {};
   const laneLatencyMs: Record<string, number> = {};
+  const laneQueryCount: Record<string, number> = {};
 
   for (const lane of eligibleLanes) {
     const result = await provider.searchLane({
@@ -74,9 +77,12 @@ export async function searchTavily(
       query: result.query,
       results: result.results
     });
-    cacheHit[result.lane] = result.cache_hit;
-    rateLimited[result.lane] = result.rate_limited;
-    laneLatencyMs[result.lane] = result.latency_ms;
+    laneQueryCount[result.lane] = (laneQueryCount[result.lane] ?? 0) + 1;
+    cacheHit[result.lane] = Boolean(cacheHit[result.lane]) || result.cache_hit;
+    rateLimited[result.lane] =
+      Boolean(rateLimited[result.lane]) || result.rate_limited;
+    laneLatencyMs[result.lane] =
+      (laneLatencyMs[result.lane] ?? 0) + result.latency_ms;
   }
 
   const endMs = now();
@@ -90,7 +96,8 @@ export async function searchTavily(
     latency_ms: Math.max(0, endMs - startMs),
     cache_hit: cacheHit,
     rate_limited: rateLimited,
-    lane_latency_ms: laneLatencyMs
+    lane_latency_ms: laneLatencyMs,
+    lane_query_count: laneQueryCount
   });
 
   return {
