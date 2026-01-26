@@ -1,5 +1,9 @@
-import { validateConfig, validateTelegramConfig } from "./config.schema.js";
-import type { BotConfig, TelegramBotConfig } from "./config.schema.js";
+import {
+  validateConfig,
+  validateTelegramConfig,
+  validateTavilyConfig
+} from "./config.schema.js";
+import type { BotConfig, TavilyConfig, TelegramBotConfig } from "./config.schema.js";
 
 export function parseAdminUserIds(raw: string | undefined): number[] {
   if (!raw) {
@@ -27,4 +31,11 @@ export function loadTelegramConfig(
     admin_user_ids: adminUserIds,
     bot_token: botToken
   });
+}
+
+export function loadTavilyConfig(
+  env: NodeJS.ProcessEnv = process.env
+): TavilyConfig {
+  const apiKey = env.TAVILY_API_KEY?.trim();
+  return validateTavilyConfig({ api_key: apiKey });
 }

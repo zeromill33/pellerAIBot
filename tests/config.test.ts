@@ -1,9 +1,10 @@
 import { describe, it, expect } from "vitest";
 import {
   validateConfig,
-  validateTelegramConfig
+  validateTelegramConfig,
+  validateTavilyConfig
 } from "../src/config/config.schema.js";
-import { parseAdminUserIds } from "../src/config/load.js";
+import { loadTavilyConfig, parseAdminUserIds } from "../src/config/load.js";
 
 describe("config validation", () => {
   it("fails when admin_user_ids is missing", () => {
@@ -49,5 +50,32 @@ describe("parseAdminUserIds", () => {
 
   it("returns empty list for empty input", () => {
     expect(parseAdminUserIds("")).toEqual([]);
+  });
+});
+
+describe("tavily config validation", () => {
+  it("applies defaults for tavily config", () => {
+    const config = validateTavilyConfig();
+    expect(config.default.include_raw_content).toBe(true);
+    expect(config.default.include_answer).toBe(false);
+    expect(config.default.auto_parameters).toBe(true);
+    expect(config.lanes.A_update.search_depth).toBe("basic");
+    expect(config.lanes.C_counter.search_depth).toBe("advanced");
+  });
+
+  it("allows config overrides", () => {
+    const config = validateTavilyConfig({
+      default: { include_raw_content: false },
+      lanes: { A_update: { max_results: 9 } }
+    });
+    expect(config.default.include_raw_content).toBe(false);
+    expect(config.lanes.A_update.max_results).toBe(9);
+  });
+});
+
+describe("loadTavilyConfig", () => {
+  it("loads api key from env", () => {
+    const config = loadTavilyConfig({ TAVILY_API_KEY: "test_key" } as NodeJS.ProcessEnv);
+    expect(config.api_key).toBe("test_key");
   });
 });

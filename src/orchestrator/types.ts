@@ -77,6 +77,7 @@ export type MarketContext = {
   description?: string;
   resolution_rules_raw?: string;
   end_time?: string;
+  category?: string;
   markets: GammaMarket[];
   primary_market_id?: string;
   outcomePrices?: number[];
@@ -151,4 +152,15 @@ export type MarketSignal = {
   token_id: string;
   clob_snapshot: ClobSnapshot;
   price_context: PriceContext;
+};
+
+export type TavilyLane = "A" | "B" | "C" | "D";
+
+export type TavilyQueryLane = {
+  lane: TavilyLane;
+  query: string;
+};
+
+export type TavilyQueryPlan = {
+  lanes: TavilyQueryLane[];
 };
