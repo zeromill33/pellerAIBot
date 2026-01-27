@@ -243,7 +243,8 @@ function buildPublishPipelineSteps(
         }
         const { evidence_candidates } = buildEvidenceCandidates({
           event_slug: ctx.event_slug,
-          tavily_results: ctx.tavily_results
+          tavily_results: ctx.tavily_results,
+          market_signals: ctx.market_signals
         });
         return { ...ctx, evidence_candidates };
       }

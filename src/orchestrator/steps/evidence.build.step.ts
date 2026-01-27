@@ -2,6 +2,8 @@ import { createAppError, ERROR_CODES } from "../errors.js";
 import type {
   EvidenceCandidate,
   EvidenceSourceType,
+  MarketSignal,
+  TavilyLane,
   TavilyLaneResult,
   TavilySearchResult
 } from "../types.js";
@@ -15,6 +17,7 @@ import {
 type EvidenceBuildInput = {
   event_slug: string;
   tavily_results: TavilyLaneResult[];
+  market_signals?: MarketSignal[];
 };
 
 type EvidenceBuildOutput = {
@@ -26,6 +29,8 @@ const MAX_CLAIM_CHARS = 280;
 const DEFAULT_STANCE = "neutral";
 const DEFAULT_NOVELTY = "unknown";
 const DEFAULT_STRENGTH = 1;
+const MARKET_EVIDENCE_LANE: TavilyLane = "A";
+const MARKET_EVIDENCE_QUERY = "market_behavior";
 
 const SOURCE_PRIORITY: Record<EvidenceSourceType, number> = {
   official: 0,
@@ -33,6 +38,13 @@ const SOURCE_PRIORITY: Record<EvidenceSourceType, number> = {
   market: 2,
   social: 3,
   onchain: 4
+};
+
+const DEFAULT_SOURCE_TYPE_BY_LANE: Record<TavilyLane, EvidenceSourceType> = {
+  A: "media",
+  B: "media",
+  C: "media",
+  D: "social"
 };
 
 const SOCIAL_DOMAINS = new Set([
@@ -58,6 +70,25 @@ const MARKET_DOMAINS = new Set([
   "betfair.com"
 ]);
 
+const OFFICIAL_DOMAINS = new Set([
+  "whitehouse.gov",
+  "sec.gov",
+  "federalreserve.gov",
+  "who.int",
+  "ec.europa.eu"
+]);
+
+const MEDIA_DOMAINS = new Set([
+  "reuters.com",
+  "bloomberg.com",
+  "wsj.com",
+  "ft.com",
+  "nytimes.com",
+  "apnews.com",
+  "bbc.com",
+  "cnn.com"
+]);
+
 const ONCHAIN_DOMAINS = new Set([
   "etherscan.io",
   "basescan.org",
@@ -76,12 +107,16 @@ const OFFICIAL_PATH_HINTS = [
   "/newsroom"
 ];
 
+const ALLOW_ONCHAIN_SOURCE_TYPES = false;
+
 type InternalCandidate = EvidenceCandidate & {
   normalized_url: string;
   similarity_key: string;
   priority: number;
   published_at_ms: number | null;
 };
+
+const POLYMARKET_BASE_URL = "https://polymarket.com";
 
 function normalizeUrl(input: string): string {
   const trimmed = input.trim();
@@ -126,29 +161,158 @@ function hasPrefixMatch(value: string, prefixes: string[]): boolean {
   return prefixes.some((prefix) => value.includes(prefix));
 }
 
-function resolveSourceType(domain: string, url: string): EvidenceSourceType {
+function buildMarketUrl(eventSlug: string): string {
+  const slug = eventSlug.trim();
+  if (!slug) {
+    return POLYMARKET_BASE_URL;
+  }
+  return `${POLYMARKET_BASE_URL}/event/${encodeURIComponent(slug)}`;
+}
+
+function formatSignedPct(value: number): string {
+  const pct = value * 100;
+  const rounded = Math.abs(pct) < 0.05 ? 0 : pct;
+  const formatted = Math.abs(rounded).toFixed(1);
+  if (rounded > 0) {
+    return `+${formatted}%`;
+  }
+  if (rounded < 0) {
+    return `-${formatted}%`;
+  }
+  return `0.0%`;
+}
+
+function isOfficialDomain(domain: string, url: string): boolean {
   const normalizedDomain = normalizeDomain(domain);
-  const normalizedUrl = url.toLowerCase();
-  if (SOCIAL_DOMAINS.has(normalizedDomain)) {
-    return "social";
-  }
-  if (MARKET_DOMAINS.has(normalizedDomain)) {
-    return "market";
-  }
-  if (ONCHAIN_DOMAINS.has(normalizedDomain)) {
-    return "onchain";
+  if (OFFICIAL_DOMAINS.has(normalizedDomain)) {
+    return true;
   }
   if (
     normalizedDomain.endsWith(".gov") ||
     normalizedDomain.includes(".gov.") ||
     normalizedDomain.endsWith(".mil")
   ) {
+    return true;
+  }
+  return hasPrefixMatch(url, OFFICIAL_PATH_HINTS);
+}
+
+function resolveSourceType(
+  lane: TavilyLane,
+  domain: string,
+  url: string
+): EvidenceSourceType {
+  const normalizedDomain = normalizeDomain(domain);
+  const normalizedUrl = url.toLowerCase();
+
+  if (lane === "D") {
+    return "social";
+  }
+
+  if (lane === "B" && isOfficialDomain(normalizedDomain, normalizedUrl)) {
     return "official";
   }
-  if (hasPrefixMatch(normalizedUrl, OFFICIAL_PATH_HINTS)) {
+  if ((lane === "A" || lane === "C") && MEDIA_DOMAINS.has(normalizedDomain)) {
+    return "media";
+  }
+
+  if (SOCIAL_DOMAINS.has(normalizedDomain)) {
+    return "social";
+  }
+  if (MARKET_DOMAINS.has(normalizedDomain)) {
+    return "market";
+  }
+  if (ALLOW_ONCHAIN_SOURCE_TYPES && ONCHAIN_DOMAINS.has(normalizedDomain)) {
+    return "onchain";
+  }
+  if (isOfficialDomain(normalizedDomain, normalizedUrl)) {
     return "official";
   }
-  return "media";
+  if (MEDIA_DOMAINS.has(normalizedDomain)) {
+    return "media";
+  }
+  return DEFAULT_SOURCE_TYPE_BY_LANE[lane];
+}
+
+function buildMarketClaim(signal: MarketSignal): string {
+  const parts: string[] = [];
+  const change24h = signal.price_context.signals.change_24h;
+  if (typeof change24h === "number") {
+    parts.push(`过去24h价格变动${formatSignedPct(change24h)}`);
+  }
+  const spread = signal.clob_snapshot.spread;
+  if (typeof spread === "number") {
+    parts.push(`盘口点差${spread.toFixed(4)}`);
+  }
+  const walls = signal.clob_snapshot.notable_walls.length;
+  if (walls > 0) {
+    parts.push(`检测到${walls}个显著墙`);
+  }
+  if (signal.price_context.signals.spike_flag === true) {
+    parts.push("检测到价格尖峰");
+  }
+  if (parts.length === 0) {
+    return "";
+  }
+  return `市场行为：${parts.join("；")}`;
+}
+
+function selectMarketSignal(signals: MarketSignal[]): MarketSignal | null {
+  let fallback: MarketSignal | null = null;
+  for (const signal of signals) {
+    if (!fallback) {
+      fallback = signal;
+    }
+    const hasSignal =
+      typeof signal.price_context.signals.change_24h === "number" ||
+      signal.clob_snapshot.notable_walls.length > 0 ||
+      typeof signal.clob_snapshot.spread === "number";
+    if (hasSignal) {
+      return signal;
+    }
+  }
+  return fallback;
+}
+
+function buildMarketEvidenceCandidates(
+  eventSlug: string,
+  signals: MarketSignal[] | undefined
+): InternalCandidate[] {
+  if (!signals || signals.length === 0) {
+    return [];
+  }
+  const signal = selectMarketSignal(signals);
+  if (!signal) {
+    return [];
+  }
+  const claim = buildMarketClaim(signal);
+  if (!claim) {
+    return [];
+  }
+  const url = buildMarketUrl(eventSlug);
+  const domain = normalizeDomain(url);
+  const normalizedUrl = normalizeUrl(url);
+  const similarityKey = buildSimilarityKey(domain, claim);
+
+  return [
+    {
+      source_type: "market",
+      url,
+      domain,
+      published_at: undefined,
+      claim: truncateText(claim, MAX_CLAIM_CHARS),
+      stance: DEFAULT_STANCE,
+      novelty: DEFAULT_NOVELTY,
+      repeated: false,
+      strength: DEFAULT_STRENGTH,
+      lane: MARKET_EVIDENCE_LANE,
+      query: MARKET_EVIDENCE_QUERY,
+      normalized_url: normalizedUrl,
+      similarity_key: similarityKey || normalizedUrl,
+      priority: SOURCE_PRIORITY.market,
+      published_at_ms: null
+    }
+  ];
 }
 
 function buildClaim(result: TavilySearchResult): string {
@@ -173,7 +337,7 @@ function buildCandidate(
     return null;
   }
   const similarityKey = buildSimilarityKey(domain, result.title ?? url);
-  const sourceType = resolveSourceType(domain, url);
+  const sourceType = resolveSourceType(lane.lane, domain, url);
   const publishedAtMs = parsePublishedAt(result.published_at);
 
   const candidate: InternalCandidate = {
@@ -264,6 +428,18 @@ export function buildEvidenceCandidates(
 
   const urlSeen = new Set<string>();
   const candidates: InternalCandidate[] = [];
+  const marketCandidates = buildMarketEvidenceCandidates(
+    input.event_slug,
+    input.market_signals
+  );
+
+  for (const candidate of marketCandidates) {
+    if (candidate.normalized_url && urlSeen.has(candidate.normalized_url)) {
+      continue;
+    }
+    urlSeen.add(candidate.normalized_url);
+    candidates.push(candidate);
+  }
 
   for (const lane of input.tavily_results) {
     for (const result of lane.results) {
