@@ -16,6 +16,7 @@ import { mergeLiquidityProxy } from "./steps/market.liquidity.proxy.step.js";
 import { fetchMarketSignals } from "./steps/market.signals.fetch.step.js";
 import { buildTavilyQueryPlan } from "./steps/query.plan.build.step.js";
 import { searchTavily } from "./steps/search.tavily.step.js";
+import { buildEvidenceCandidates } from "./steps/evidence.build.step.js";
 import type { GammaProvider } from "../providers/polymarket/gamma.js";
 import type { ClobProvider } from "../providers/polymarket/clob.js";
 import type { PricingProvider } from "../providers/polymarket/pricing.js";
@@ -224,6 +225,27 @@ function buildPublishPipelineSteps(
           { provider: options.tavilyProvider }
         );
         return { ...ctx, market_context, query_plan, tavily_results };
+      }
+    },
+    {
+      id: "evidence.build",
+      input_keys: ["TavilyLaneResult"],
+      output_keys: ["EvidenceCandidate"],
+      run: async (ctx) => {
+        if (!ctx.tavily_results) {
+          throw createAppError({
+            code: ERROR_CODES.STEP_EVIDENCE_BUILD_MISSING_INPUT,
+            message: "Missing tavily_results for evidence.build",
+            category: "VALIDATION",
+            retryable: false,
+            details: { event_slug: ctx.event_slug }
+          });
+        }
+        const { evidence_candidates } = buildEvidenceCandidates({
+          event_slug: ctx.event_slug,
+          tavily_results: ctx.tavily_results
+        });
+        return { ...ctx, evidence_candidates };
       }
     }
   ];

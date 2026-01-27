@@ -180,6 +180,27 @@ export type TavilyLaneResult = {
   results: TavilySearchResult[];
 };
 
+export type EvidenceSourceType =
+  | "official"
+  | "media"
+  | "market"
+  | "social"
+  | "onchain";
+
+export type EvidenceStance = "pro" | "con" | "neutral";
+
+export type EvidenceNovelty = "new" | "priced" | "unknown";
+
 export type EvidenceCandidate = {
-  stance?: string;
+  source_type: EvidenceSourceType;
+  url: string;
+  domain: string;
+  published_at?: string;
+  claim: string;
+  stance: EvidenceStance;
+  novelty: EvidenceNovelty;
+  repeated: boolean;
+  strength: number;
+  lane: TavilyLane;
+  query: string;
 };

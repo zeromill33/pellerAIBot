@@ -23,7 +23,21 @@ describe("pipeline query.plan.build", () => {
       end_time: "2026-06-01T00:00:00Z",
       markets: []
     };
-    const evidenceCandidates: EvidenceCandidate[] = [{ stance: "supports_no" }];
+    const evidenceCandidates: EvidenceCandidate[] = [
+      {
+        source_type: "media",
+        url: "https://example.com/article",
+        domain: "example.com",
+        published_at: "2026-01-01T00:00:00Z",
+        claim: "Sample claim",
+        stance: "con",
+        novelty: "unknown",
+        repeated: false,
+        strength: 1,
+        lane: "A",
+        query: "query"
+      }
+    ];
 
     const result = await queryStep.run({
       request_id: "req-1",
