@@ -20,10 +20,13 @@ import { fetchMarketSignals } from "./steps/market.signals.fetch.step.js";
 import { buildTavilyQueryPlan } from "./steps/query.plan.build.step.js";
 import { searchTavily } from "./steps/search.tavily.step.js";
 import { buildEvidenceCandidates } from "./steps/evidence.build.step.js";
+import { generateReport } from "./steps/report.generate.step.js";
 import type { GammaProvider } from "../providers/polymarket/gamma.js";
 import type { ClobProvider } from "../providers/polymarket/clob.js";
 import type { PricingProvider } from "../providers/polymarket/pricing.js";
 import type { TavilyProvider } from "../providers/tavily/index.js";
+import type { LLMProvider } from "../providers/llm/types.js";
+import type { ReportV1Json } from "../providers/llm/types.js";
 
 type PublishPipelineContext = PublishPipelineInput & {
   market_context?: MarketContext;
@@ -32,6 +35,7 @@ type PublishPipelineContext = PublishPipelineInput & {
   liquidity_proxy?: LiquidityProxy;
   query_plan?: TavilyQueryPlan;
   tavily_results?: TavilyLaneResult[];
+  report_json?: ReportV1Json;
 };
 
 type PipelineStep = {
@@ -64,6 +68,7 @@ type PipelineStepOptions = {
   clobProvider?: ClobProvider;
   pricingProvider?: PricingProvider;
   tavilyProvider?: TavilyProvider;
+  llmProvider?: LLMProvider;
   tavilyConfig?: TavilyConfigInput;
   evidenceConfig?: EvidenceConfigInput;
   marketSignalsTopMarkets?: number;
@@ -252,6 +257,36 @@ function buildPublishPipelineSteps(
           evidence_config: options.evidenceConfig
         });
         return { ...ctx, evidence_candidates };
+      }
+    },
+    {
+      id: "report.generate",
+      input_keys: ["MarketContext", "ClobSnapshot", "TavilyLaneResult"],
+      output_keys: ["ReportV1Json"],
+      run: async (ctx) => {
+        if (!ctx.market_context || !ctx.tavily_results) {
+          throw createAppError({
+            code: ERROR_CODES.STEP_REPORT_GENERATE_MISSING_INPUT,
+            message: "Missing market_context/tavily_results for report.generate",
+            category: "VALIDATION",
+            retryable: false,
+            details: { event_slug: ctx.event_slug }
+          });
+        }
+        const { report_json } = await generateReport(
+          {
+            request_id: ctx.request_id,
+            run_id: ctx.run_id,
+            event_slug: ctx.event_slug,
+            market_context: ctx.market_context,
+            clob_snapshot: ctx.clob_snapshot,
+            tavily_results: ctx.tavily_results,
+            market_signals: ctx.market_signals,
+            liquidity_proxy: ctx.liquidity_proxy
+          },
+          { provider: options.llmProvider }
+        );
+        return { ...ctx, report_json };
       }
     }
   ];

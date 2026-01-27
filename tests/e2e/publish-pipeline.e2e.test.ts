@@ -307,6 +307,21 @@ function buildStepSummary(
     };
   }
 
+  if (entry.step_id === "report.generate") {
+    const report = context.report_json;
+    const reportKeys =
+      report && typeof report === "object"
+        ? Object.keys(report as Record<string, unknown>).sort()
+        : [];
+    return {
+      ...base,
+      result: {
+        report_keys: reportKeys,
+        tavily_lane_count: context.tavily_results?.length ?? 0
+      }
+    };
+  }
+
   return { ...base, result: {} };
 }
 
@@ -357,7 +372,7 @@ describeE2E("publish pipeline e2e", () => {
       const slug = resolveEventSlug(defaultUrl);
       const clock = createStepClock();
       const useLive = process.env.TEST_LIVE === "1";
-      const stopStepId = process.env.E2E_STOP_STEP ?? "evidence.build";
+      const stopStepId = process.env.E2E_STOP_STEP ?? "report.generate";
       const topMarkets =
         process.env.E2E_TOP_MARKETS && Number.isFinite(Number(process.env.E2E_TOP_MARKETS))
           ? Number(process.env.E2E_TOP_MARKETS)
@@ -376,6 +391,16 @@ describeE2E("publish pipeline e2e", () => {
             pricingProvider: createPricingFixtureProvider(),
             marketSignalsTopMarkets: topMarkets
           };
+        stepOptions.llmProvider = {
+          async generateReportV1(input) {
+            return {
+              report_version: "mock",
+              context_title: input.context.title,
+              evidence_lanes: input.evidence.tavily_results.length,
+              has_clob: Boolean(input.clob)
+            };
+          }
+        };
         if (forceChatter) {
           stepOptions.tavilyConfig = {
             lanes: {
@@ -473,7 +498,7 @@ describeE2E("publish pipeline e2e", () => {
       const stepSummaries: StepSummary[] = [];
       const slug = resolveEventSlug(liveDLaneUrl);
       const clock = createStepClock();
-      const stopStepId = process.env.E2E_STOP_STEP_D ?? "evidence.build";
+      const stopStepId = process.env.E2E_STOP_STEP_D ?? "report.generate";
       const topMarkets =
         process.env.E2E_TOP_MARKETS && Number.isFinite(Number(process.env.E2E_TOP_MARKETS))
           ? Number(process.env.E2E_TOP_MARKETS)
@@ -496,7 +521,17 @@ describeE2E("publish pipeline e2e", () => {
             gammaProvider: createGammaProvider(),
             clobProvider: createClobProvider(),
             pricingProvider: createPricingProvider(),
-            marketSignalsTopMarkets: topMarkets
+            marketSignalsTopMarkets: topMarkets,
+            llmProvider: {
+              async generateReportV1(input) {
+                return {
+                  report_version: "mock",
+                  context_title: input.context.title,
+                  evidence_lanes: input.evidence.tavily_results.length,
+                  has_clob: Boolean(input.clob)
+                };
+              }
+            }
           }
         }
       );

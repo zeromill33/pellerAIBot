@@ -1,0 +1,47 @@
+schema: 1
+story: "5.1"
+story_title: "LLM 输入组装"
+gate: PASS
+status_reason: "LLM 输入组装与确定性排序实现到位，测试覆盖关键映射与 E2E stop step。"
+reviewer: "Quinn (Test Architect)"
+updated: "2026-01-27T14:16:24Z"
+
+waiver: { active: false }
+
+top_issues: []
+
+risk_summary:
+  totals: { critical: 0, high: 0, medium: 0, low: 0 }
+  recommendations:
+    must_fix: []
+    monitor: []
+
+quality_score: 100
+expires: "2026-02-10T14:16:24Z"
+
+evidence:
+  tests_reviewed: 2
+  risks_identified: 0
+  trace:
+    ac_covered: [1, 2, 3, 4, 5, 6, 7]
+    ac_gaps: []
+
+nfr_validation:
+  security:
+    status: PASS
+    notes: "API key 通过环境变量注入，未见敏感信息落库或日志泄漏。"
+  performance:
+    status: PASS
+    notes: "输入组装与排序为轻量处理，未引入显著性能负担。"
+  reliability:
+    status: PASS
+    notes: "缺失输入有明确错误路径，E2E 覆盖到 report.generate。"
+  maintainability:
+    status: PASS
+    notes: "结构清晰，测试覆盖关键映射逻辑。"
+
+recommendations:
+  immediate: []
+  future:
+    - action: "为 OpenAI-compatible adapter 增加 mock contract 测试"
+      refs: ["src/providers/llm/adapters/openai-compatible.ts"]
