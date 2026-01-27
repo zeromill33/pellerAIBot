@@ -1,5 +1,8 @@
 import { validateTavilyConfig } from "../../config/config.schema.js";
-import type { TavilyChatterConfig, TavilyConfig } from "../../config/config.schema.js";
+import type {
+  TavilyChatterConfig,
+  TavilyConfigInput
+} from "../../config/config.schema.js";
 import { createAppError, ERROR_CODES } from "../errors.js";
 import type {
   EvidenceCandidate,
@@ -16,7 +19,7 @@ type QueryPlanBuildInput = {
   market_context: MarketContext;
   market_signals?: MarketSignal[];
   evidence_candidates?: EvidenceCandidate[];
-  tavily_config?: Partial<TavilyConfig>;
+  tavily_config?: TavilyConfigInput;
 };
 
 type QueryPlanBuildOutput = {
@@ -262,7 +265,7 @@ function applyTemplate(
 ): string {
   let result = template;
   for (const [key, value] of Object.entries(replacements)) {
-    result = result.replaceAll(`{${key}}`, value);
+    result = result.split(`{${key}}`).join(value);
   }
   return finalizeQuery(result);
 }
@@ -319,7 +322,7 @@ function evaluateChatterTriggers(
   const oddsAvailable = typeof change24h === "number";
   const changePct = oddsAvailable ? Math.abs(change24h) * 100 : null;
   const oddsTriggered =
-    oddsAvailable && changePct >= config.triggers.odds_change_24h_pct;
+    changePct !== null && changePct >= config.triggers.odds_change_24h_pct;
 
   const category = normalizeCategory(context.category);
   const eligibleCategories = config.triggers.social_categories
@@ -336,7 +339,7 @@ function evaluateChatterTriggers(
   const evidenceAvailable = Array.isArray(evidenceCandidates);
   const evidenceCount = evidenceAvailable
     ? countDisagreementEvidence(evidenceCandidates)
-    : null;
+    : 0;
   const disagreementTriggered =
     disagreementEnabled &&
     evidenceAvailable &&

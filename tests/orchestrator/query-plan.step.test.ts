@@ -4,6 +4,14 @@ import { AppError, ERROR_CODES } from "../../src/orchestrator/errors.js";
 import type { MarketContext, MarketSignal } from "../../src/orchestrator/types.js";
 
 describe("buildTavilyQueryPlan", () => {
+  const conditionalDLane = {
+    lanes: {
+      D_chatter: {
+        enabled: "conditional"
+      }
+    }
+  } as const;
+
   it("builds A/B/C query plan with time anchor", () => {
     const marketContext: MarketContext = {
       event_id: "event_1",
@@ -15,7 +23,10 @@ describe("buildTavilyQueryPlan", () => {
       markets: []
     };
 
-    const result = buildTavilyQueryPlan({ market_context: marketContext });
+    const result = buildTavilyQueryPlan({
+      market_context: marketContext,
+      tavily_config: conditionalDLane
+    });
     expect(result.query_plan.lanes).toHaveLength(3);
     expect(result.query_plan.lanes.map((lane) => lane.lane)).toEqual([
       "A",
@@ -57,7 +68,10 @@ describe("buildTavilyQueryPlan", () => {
       }
     };
 
-    const result = buildTavilyQueryPlan({ market_context: marketContext });
+    const result = buildTavilyQueryPlan({
+      market_context: marketContext,
+      tavily_config: conditionalDLane
+    });
     const dLanes = result.query_plan.lanes.filter((lane) => lane.lane === "D");
     expect(dLanes.length).toBeGreaterThanOrEqual(2);
     expect(dLanes.length).toBeLessThanOrEqual(3);
@@ -109,7 +123,8 @@ describe("buildTavilyQueryPlan", () => {
 
     const result = buildTavilyQueryPlan({
       market_context: marketContext,
-      market_signals: marketSignals
+      market_signals: marketSignals,
+      tavily_config: conditionalDLane
     });
     const dLanes = result.query_plan.lanes.filter((lane) => lane.lane === "D");
     expect(dLanes.length).toBeGreaterThanOrEqual(2);
@@ -127,7 +142,10 @@ describe("buildTavilyQueryPlan", () => {
       markets: []
     };
 
-    const result = buildTavilyQueryPlan({ market_context: marketContext });
+    const result = buildTavilyQueryPlan({
+      market_context: marketContext,
+      tavily_config: conditionalDLane
+    });
     const dLanes = result.query_plan.lanes.filter((lane) => lane.lane === "D");
     expect(dLanes.length).toBeGreaterThanOrEqual(2);
   });
@@ -147,11 +165,60 @@ describe("buildTavilyQueryPlan", () => {
     const result = buildTavilyQueryPlan({
       market_context: marketContext,
       evidence_candidates: [
-        { stance: "supports_no" },
-        { stance: "supports_no" },
-        { stance: "supports_yes" },
-        { stance: "supports_yes" }
-      ]
+        {
+          source_type: "media",
+          url: "https://example.com/no-1",
+          domain: "example.com",
+          published_at: "2026-01-01T00:00:00Z",
+          claim: "No evidence",
+          stance: "supports_no",
+          novelty: "unknown",
+          repeated: false,
+          strength: 1,
+          lane: "A",
+          query: "q"
+        },
+        {
+          source_type: "media",
+          url: "https://example.com/no-2",
+          domain: "example.com",
+          published_at: "2026-01-01T00:00:00Z",
+          claim: "No evidence",
+          stance: "supports_no",
+          novelty: "unknown",
+          repeated: false,
+          strength: 1,
+          lane: "A",
+          query: "q"
+        },
+        {
+          source_type: "media",
+          url: "https://example.com/yes-1",
+          domain: "example.com",
+          published_at: "2026-01-01T00:00:00Z",
+          claim: "Yes evidence",
+          stance: "supports_yes",
+          novelty: "unknown",
+          repeated: false,
+          strength: 1,
+          lane: "A",
+          query: "q"
+        },
+        {
+          source_type: "media",
+          url: "https://example.com/yes-2",
+          domain: "example.com",
+          published_at: "2026-01-01T00:00:00Z",
+          claim: "Yes evidence",
+          stance: "supports_yes",
+          novelty: "unknown",
+          repeated: false,
+          strength: 1,
+          lane: "A",
+          query: "q"
+        }
+      ],
+      tavily_config: conditionalDLane
     });
     const dLanes = result.query_plan.lanes.filter((lane) => lane.lane === "D");
     expect(dLanes).toHaveLength(0);
@@ -174,7 +241,8 @@ describe("buildTavilyQueryPlan", () => {
       const result = buildTavilyQueryPlan({
         request_id: "req-1",
         run_id: "run-1",
-        market_context: marketContext
+        market_context: marketContext,
+        tavily_config: conditionalDLane
       });
       const dLanes = result.query_plan.lanes.filter(
         (lane) => lane.lane === "D"
@@ -206,7 +274,10 @@ describe("buildTavilyQueryPlan", () => {
       markets: []
     };
 
-    const result = buildTavilyQueryPlan({ market_context: marketContext });
+    const result = buildTavilyQueryPlan({
+      market_context: marketContext,
+      tavily_config: conditionalDLane
+    });
     for (const lane of result.query_plan.lanes) {
       expect(lane.query.length).toBeGreaterThan(0);
       expect(lane.query).toContain("before 2025-10-01");

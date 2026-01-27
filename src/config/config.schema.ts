@@ -1,4 +1,4 @@
-import { DEFAULT_TAVILY_CONFIG } from "./defaults.js";
+import { DEFAULT_EVIDENCE_CONFIG, DEFAULT_TAVILY_CONFIG } from "./defaults.js";
 
 export type BotConfig = {
   admin_user_ids: number[];
@@ -46,6 +46,15 @@ export type TavilyChatterConfig = TavilyLaneConfig & {
   queries: TavilyChatterQuery[];
 };
 
+export type TavilyChatterTriggerInput = Partial<TavilyChatterTrigger>;
+
+export type TavilyChatterConfigInput = Partial<
+  Omit<TavilyChatterConfig, "triggers" | "queries">
+> & {
+  triggers?: TavilyChatterTriggerInput;
+  queries?: TavilyChatterQuery[];
+};
+
 export type TavilyLaneSet = {
   A_update: TavilyLaneConfig;
   B_primary: TavilyLaneConfig;
@@ -58,6 +67,34 @@ export type TavilyConfig = {
   default: TavilyDefaultParams;
   rate_limit: TavilyRateLimitConfig;
   lanes: TavilyLaneSet;
+};
+
+export type TavilyConfigInput = {
+  api_key?: string;
+  default?: Partial<TavilyDefaultParams>;
+  rate_limit?: Partial<TavilyRateLimitConfig>;
+  lanes?: {
+    A_update?: Partial<TavilyLaneConfig>;
+    B_primary?: Partial<TavilyLaneConfig>;
+    C_counter?: Partial<TavilyLaneConfig>;
+    D_chatter?: TavilyChatterConfigInput;
+  };
+};
+
+export type EvidenceNoveltyConfig = {
+  new_within_hours: number;
+  priced_after_hours: number;
+  price_change_24h_pct: number;
+  min_repeat_sources: number;
+  recency_keywords: string[];
+};
+
+export type EvidenceConfig = {
+  novelty: EvidenceNoveltyConfig;
+};
+
+export type EvidenceConfigInput = {
+  novelty?: Partial<EvidenceNoveltyConfig>;
 };
 
 function normalizeAdminUserIds(ids: number[]): number[] {
@@ -86,8 +123,22 @@ function normalizePositiveInt(
   return value;
 }
 
+function normalizePositiveNumber(
+  value: number | undefined,
+  fallback: number,
+  label: string
+): number {
+  if (value === undefined) {
+    return fallback;
+  }
+  if (typeof value !== "number" || Number.isNaN(value) || value <= 0) {
+    throw new Error(`${label} must be a positive number`);
+  }
+  return value;
+}
+
 function normalizeRateLimit(
-  value: TavilyRateLimitConfig | undefined,
+  value: Partial<TavilyRateLimitConfig> | undefined,
   fallback: TavilyRateLimitConfig
 ): TavilyRateLimitConfig {
   if (!value) {
@@ -145,6 +196,24 @@ function normalizeStringArray(
   return normalized;
 }
 
+function normalizeKeywordList(
+  value: string[] | undefined,
+  fallback: string[],
+  label: string
+): string[] {
+  const raw = value ?? fallback;
+  if (raw.length === 0) {
+    throw new Error(`${label} must contain at least one keyword`);
+  }
+  const normalized = raw
+    .map((entry) => entry.trim().toLowerCase())
+    .filter((entry) => entry.length > 0);
+  if (normalized.length === 0) {
+    throw new Error(`${label} must contain non-empty keywords`);
+  }
+  return Array.from(new Set(normalized));
+}
+
 function normalizeChatterQueries(
   value: TavilyChatterQuery[] | undefined,
   fallback: TavilyChatterQuery[],
@@ -169,7 +238,7 @@ function normalizeChatterQueries(
 }
 
 function normalizeChatterTriggers(
-  value: TavilyChatterTrigger | undefined,
+  value: TavilyChatterTriggerInput | undefined,
   fallback: TavilyChatterTrigger,
   label: string
 ): TavilyChatterTrigger {
@@ -231,7 +300,7 @@ function normalizeLaneConfig(
 
 function normalizeChatterConfig(
   base: TavilyChatterConfig,
-  value: Partial<TavilyChatterConfig> | undefined,
+  value: TavilyChatterConfigInput | undefined,
   label: string
 ): TavilyChatterConfig {
   const enabled = value?.enabled ?? base.enabled;
@@ -276,10 +345,10 @@ export function validateTelegramConfig(
 }
 
 export function validateTavilyConfig(
-  raw: Partial<TavilyConfig> = {}
+  raw: TavilyConfigInput = {}
 ): TavilyConfig {
   const defaults = DEFAULT_TAVILY_CONFIG;
-  const defaultParams = raw.default ?? {};
+  const defaultParams: Partial<TavilyDefaultParams> = raw.default ?? {};
   const apiKey = raw.api_key?.trim();
 
   return {
@@ -319,6 +388,43 @@ export function validateTavilyConfig(
         defaults.lanes.D_chatter,
         raw.lanes?.D_chatter,
         "lanes.D_chatter"
+      )
+    }
+  };
+}
+
+export function validateEvidenceConfig(
+  raw: EvidenceConfigInput = {}
+): EvidenceConfig {
+  const defaults = DEFAULT_EVIDENCE_CONFIG;
+  const novelty: Partial<EvidenceNoveltyConfig> = raw.novelty ?? {};
+
+  return {
+    novelty: {
+      new_within_hours: normalizePositiveInt(
+        novelty.new_within_hours,
+        defaults.novelty.new_within_hours,
+        "novelty.new_within_hours"
+      ),
+      priced_after_hours: normalizePositiveInt(
+        novelty.priced_after_hours,
+        defaults.novelty.priced_after_hours,
+        "novelty.priced_after_hours"
+      ),
+      price_change_24h_pct: normalizePositiveNumber(
+        novelty.price_change_24h_pct,
+        defaults.novelty.price_change_24h_pct,
+        "novelty.price_change_24h_pct"
+      ),
+      min_repeat_sources: normalizePositiveInt(
+        novelty.min_repeat_sources,
+        defaults.novelty.min_repeat_sources,
+        "novelty.min_repeat_sources"
+      ),
+      recency_keywords: normalizeKeywordList(
+        novelty.recency_keywords,
+        defaults.novelty.recency_keywords,
+        "novelty.recency_keywords"
       )
     }
   };

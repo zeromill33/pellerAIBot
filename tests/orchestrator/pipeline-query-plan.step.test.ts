@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { buildPublishPipelineSteps } from "../../src/orchestrator/pipeline.js";
+import type { PublishPipelineContext } from "../../src/orchestrator/pipeline.js";
 import type {
   EvidenceCandidate,
-  MarketContext,
-  PublishPipelineContext
+  MarketContext
 } from "../../src/orchestrator/types.js";
 
 describe("pipeline query.plan.build", () => {

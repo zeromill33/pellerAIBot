@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   buildPublishPipelineSteps,
   runPublishPipelineSteps,
+  type PipelineStepOptions,
   type PipelineStepLog,
   type PublishPipelineContext
 } from "../../src/orchestrator/pipeline.js";
@@ -17,7 +18,7 @@ import { createPricingProvider } from "../../src/providers/polymarket/pricing.js
 // 可选：E2E_EVENT_URL 覆盖 URL，E2E_STOP_STEP 覆盖停止的 step，E2E_FORCE_D=1 强制 D 车道，
 // 额外：E2E_EVENT_URL_D 指定“自然触发 D 车道”的 live 用例 URL，E2E_STOP_STEP_D 覆盖停止 step，
 // E2E_TOP_MARKETS 控制 market.signals 探测数量（默认 3），
-// E2E_SUMMARY_PATH 指定输出摘要文件路径（默认 tests/e2s/tmp/e2e-step-summary.json），
+// E2E_SUMMARY_PATH 指定输出摘要文件路径（默认 tests/e2e/tmp/e2e-step-summary.json），
 // E2E_SUMMARY_PATH_D 指定 D 车道用例摘要路径（默认 tests/e2e/tmp/e2e-step-summary-dlane.json）。
 const describeE2E = process.env.RUN_E2E === "1" ? describe : describe.skip;
 
@@ -125,6 +126,37 @@ type StepSummary = {
   result: Record<string, unknown>;
 };
 
+function truncate(value: string, maxLength: number): string {
+  if (value.length <= maxLength) {
+    return value;
+  }
+  return `${value.slice(0, maxLength).trim()}...`;
+}
+
+function countBy<T>(
+  items: T[],
+  selector: (item: T) => string | null | undefined
+): Record<string, number> {
+  return items.reduce<Record<string, number>>((acc, item) => {
+    const key = selector(item);
+    if (!key) {
+      return acc;
+    }
+    acc[key] = (acc[key] ?? 0) + 1;
+    return acc;
+  }, {});
+}
+
+function topEntries(
+  counts: Record<string, number>,
+  limit: number
+): Array<{ key: string; count: number }> {
+  return Object.entries(counts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([key, count]) => ({ key, count }));
+}
+
 function buildStepSummary(
   entry: PipelineStepLog,
   context: PublishPipelineContext
@@ -214,6 +246,67 @@ function buildStepSummary(
     };
   }
 
+  if (entry.step_id === "evidence.build") {
+    const candidates = context.evidence_candidates ?? [];
+    const sourcePriority: Record<string, number> = {
+      official: 0,
+      media: 1,
+      market: 2,
+      social: 3,
+      onchain: 4
+    };
+    const ordered = [...candidates].sort((a, b) => {
+      const aPriority = sourcePriority[a.source_type] ?? 99;
+      const bPriority = sourcePriority[b.source_type] ?? 99;
+      if (aPriority !== bPriority) {
+        return aPriority - bPriority;
+      }
+      const domainCompare = a.domain.localeCompare(b.domain);
+      if (domainCompare !== 0) {
+        return domainCompare;
+      }
+      return a.url.localeCompare(b.url);
+    });
+    const orderedUnique = ordered.filter((item) => !item.repeated);
+    const noveltyCounts = countBy(candidates, (item) => item.novelty);
+    const sourceTypeCounts = countBy(candidates, (item) => item.source_type);
+    const stanceCounts = countBy(candidates, (item) => item.stance);
+    const laneCounts = countBy(candidates, (item) => item.lane);
+    const domainCounts = countBy(candidates, (item) => item.domain);
+    const repeatedCount = candidates.filter((item) => item.repeated).length;
+    const publishedAtCount = candidates.filter(
+      (item) => item.published_at
+    ).length;
+    const evidenceItems = orderedUnique.map((item) => ({
+      source_type: item.source_type,
+      source_priority: sourcePriority[item.source_type] ?? null,
+      novelty: item.novelty,
+      stance: item.stance,
+      repeated: item.repeated,
+      lane: item.lane,
+      domain: item.domain,
+      url: item.url,
+      published_at: item.published_at ?? null,
+      claim_excerpt: truncate(item.claim, 120)
+    }));
+
+    return {
+      ...base,
+      result: {
+        evidence_count: candidates.length,
+        repeated_count: repeatedCount,
+        unique_count: candidates.length - repeatedCount,
+        published_at_count: publishedAtCount,
+        novelty_counts: noveltyCounts,
+        source_type_counts: sourceTypeCounts,
+        stance_counts: stanceCounts,
+        lane_counts: laneCounts,
+        top_domains: topEntries(domainCounts, 5),
+        evidence_items: evidenceItems
+      }
+    };
+  }
+
   return { ...base, result: {} };
 }
 
@@ -264,13 +357,13 @@ describeE2E("publish pipeline e2e", () => {
       const slug = resolveEventSlug(defaultUrl);
       const clock = createStepClock();
       const useLive = process.env.TEST_LIVE === "1";
-      const stopStepId = process.env.E2E_STOP_STEP ?? "market.liquidity.proxy";
+      const stopStepId = process.env.E2E_STOP_STEP ?? "evidence.build";
       const topMarkets =
         process.env.E2E_TOP_MARKETS && Number.isFinite(Number(process.env.E2E_TOP_MARKETS))
           ? Number(process.env.E2E_TOP_MARKETS)
           : 3;
       try {
-      const stepOptions = useLive
+        const stepOptions: PipelineStepOptions = useLive
           ? {
             gammaProvider: createGammaProvider(),
             clobProvider: createClobProvider(),
@@ -380,7 +473,7 @@ describeE2E("publish pipeline e2e", () => {
       const stepSummaries: StepSummary[] = [];
       const slug = resolveEventSlug(liveDLaneUrl);
       const clock = createStepClock();
-      const stopStepId = process.env.E2E_STOP_STEP_D ?? "search.tavily";
+      const stopStepId = process.env.E2E_STOP_STEP_D ?? "evidence.build";
       const topMarkets =
         process.env.E2E_TOP_MARKETS && Number.isFinite(Number(process.env.E2E_TOP_MARKETS))
           ? Number(process.env.E2E_TOP_MARKETS)

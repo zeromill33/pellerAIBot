@@ -9,7 +9,10 @@ import type {
   TavilyLaneResult,
   TavilyQueryPlan
 } from "./types.js";
-import type { TavilyConfig } from "../config/config.schema.js";
+import type {
+  EvidenceConfigInput,
+  TavilyConfigInput
+} from "../config/config.schema.js";
 import { fetchMarketContext } from "./steps/market.fetch.step.js";
 import { fetchMarketOrderbook } from "./steps/market.orderbook.fetch.step.js";
 import { mergeLiquidityProxy } from "./steps/market.liquidity.proxy.step.js";
@@ -61,7 +64,8 @@ type PipelineStepOptions = {
   clobProvider?: ClobProvider;
   pricingProvider?: PricingProvider;
   tavilyProvider?: TavilyProvider;
-  tavilyConfig?: Partial<TavilyConfig>;
+  tavilyConfig?: TavilyConfigInput;
+  evidenceConfig?: EvidenceConfigInput;
   marketSignalsTopMarkets?: number;
   marketSignalsWindowHours?: number;
   marketSignalsIntervalHours?: number;
@@ -244,7 +248,8 @@ function buildPublishPipelineSteps(
         const { evidence_candidates } = buildEvidenceCandidates({
           event_slug: ctx.event_slug,
           tavily_results: ctx.tavily_results,
-          market_signals: ctx.market_signals
+          market_signals: ctx.market_signals,
+          evidence_config: options.evidenceConfig
         });
         return { ...ctx, evidence_candidates };
       }

@@ -1,6 +1,7 @@
 import { validateTavilyConfig } from "../../config/config.schema.js";
 import type {
   TavilyConfig,
+  TavilyConfigInput,
   TavilyDefaultParams,
   TavilyLaneConfig,
   TavilySearchDepth
@@ -37,7 +38,7 @@ function selectLaneConfig(
 
 export function buildTavilyLaneParams(
   lane: TavilyLaneId,
-  rawConfig: Partial<TavilyConfig> = {}
+  rawConfig: TavilyConfigInput = {}
 ): TavilyLaneParams {
   const config = validateTavilyConfig(rawConfig);
   const laneConfig = selectLaneConfig(config, lane);

@@ -68,11 +68,11 @@
 - A：`search_depth=basic, max_results=5, time_range=7d`
 - B：`search_depth=basic, max_results=5, time_range=30d, include_domains/exclude_domains 可选`
 - C：`search_depth=advanced（仅此车道默认）, max_results=5, time_range=30d`
-- D：`enabled=conditional, search_depth=basic, max_results=3, time_range=7d, query_types=["reddit","x","controversy"]`
+- D：`enabled=always, search_depth=basic, max_results=3, time_range=7d, query_types=["reddit","x","controversy"]`
 
 ## D6. 触发补搜（节省额度的控制策略）
 
-默认只跑 A/B/C 三次。满足以下任一条件，必须启用 D（并执行全部 2–3 类 Query）：
+默认启用 D 车道。若将 D 设置为 `conditional`，满足以下任一条件时必须启用 D（并执行全部 2–3 类 Query）：
 
 - 赔率 24h 大幅波动（阈值配置化）
 - 事件属于“社交驱动”（如加密/政治争议）

@@ -1,4 +1,4 @@
-import type { TavilyConfig } from "./config.schema.js";
+import type { EvidenceConfig, TavilyConfig } from "./config.schema.js";
 
 export const DEFAULT_TAVILY_CONFIG: TavilyConfig = {
   default: {
@@ -29,7 +29,7 @@ export const DEFAULT_TAVILY_CONFIG: TavilyConfig = {
       time_range: "30d"
     },
     D_chatter: {
-      enabled: "conditional",
+      enabled: "always",
       search_depth: "basic",
       max_results: 3,
       time_range: "7d",
@@ -53,5 +53,21 @@ export const DEFAULT_TAVILY_CONFIG: TavilyConfig = {
         }
       ]
     }
+  }
+};
+
+export const DEFAULT_EVIDENCE_CONFIG: EvidenceConfig = {
+  novelty: {
+    new_within_hours: 48,
+    priced_after_hours: 72,
+    price_change_24h_pct: 8,
+    min_repeat_sources: 3,
+    recency_keywords: [
+      "today",
+      "just",
+      "breaking",
+      "minutes ago",
+      "just now"
+    ]
   }
 };

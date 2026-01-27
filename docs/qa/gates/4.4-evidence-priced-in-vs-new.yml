@@ -1,0 +1,41 @@
+schema: 1
+story: "4.4"
+story_title: "证据新旧标注（priced_in vs new）"
+gate: PASS
+status_reason: "Novelty 规则与配置已实现并通过单测与 live E2E 验证；未发现阻塞问题。"
+reviewer: "Quinn (Test Architect)"
+updated: "2026-01-27T07:50:59Z"
+
+top_issues: []
+waiver:
+  active: false
+
+quality_score: 100
+expires: "2026-02-10T07:51:17Z"
+
+evidence:
+  tests_reviewed: 5
+  risks_identified: 0
+  trace:
+    ac_covered: [1, 2, 3, 4, 5]
+    ac_gaps: []
+
+nfr_validation:
+  security:
+    status: PASS
+    notes: "未引入新的鉴权/敏感数据处理逻辑。"
+  performance:
+    status: PASS
+    notes: "E2E 摘要输出仅用于测试环境。"
+  reliability:
+    status: PASS
+    notes: "关键边界与错误路径已通过单测覆盖。"
+  maintainability:
+    status: PASS
+    notes: "配置化阈值与测试覆盖保证可维护性。"
+
+recommendations:
+  immediate: []
+  future:
+    - action: "评估 D 车道默认 always 的额度成本与监控策略"
+      refs: ["src/config/defaults.ts"]

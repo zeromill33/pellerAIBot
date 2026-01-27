@@ -1,7 +1,7 @@
 import { createAppError, ERROR_CODES } from "../../orchestrator/errors.js";
 import type { TavilyLaneResult, TavilySearchResult } from "../../orchestrator/types.js";
 import { validateTavilyConfig } from "../../config/config.schema.js";
-import type { TavilyConfig } from "../../config/config.schema.js";
+import type { TavilyConfigInput } from "../../config/config.schema.js";
 import { buildTavilyLaneParams } from "./lanes.js";
 import { buildTavilyCacheKey, TavilyCache } from "./cache.js";
 import { createTavilyClient, TavilyRequestError } from "./client.js";
@@ -35,7 +35,7 @@ export type TavilyProvider = {
 };
 
 export type TavilyProviderOptions = {
-  config?: Partial<TavilyConfig>;
+  config?: TavilyConfigInput;
   baseUrl?: string;
   timeoutMs?: number;
   retries?: number;

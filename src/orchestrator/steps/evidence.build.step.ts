@@ -7,6 +7,8 @@ import type {
   TavilyLaneResult,
   TavilySearchResult
 } from "../types.js";
+import type { EvidenceConfigInput } from "../../config/config.schema.js";
+import { validateEvidenceConfig } from "../../config/config.schema.js";
 import {
   diceCoefficient,
   normalizeDomain,
@@ -18,6 +20,8 @@ type EvidenceBuildInput = {
   event_slug: string;
   tavily_results: TavilyLaneResult[];
   market_signals?: MarketSignal[];
+  evidence_config?: EvidenceConfigInput;
+  now?: () => number;
 };
 
 type EvidenceBuildOutput = {
@@ -391,6 +395,19 @@ function selectMarketSignal(signals: MarketSignal[]): MarketSignal | null {
   return fallback;
 }
 
+function resolveChange24hPct(signals: MarketSignal[] | undefined): number | null {
+  if (!signals || signals.length === 0) {
+    return null;
+  }
+  for (const signal of signals) {
+    const change24h = signal.price_context.signals.change_24h;
+    if (typeof change24h === "number") {
+      return Math.abs(change24h) * 100;
+    }
+  }
+  return null;
+}
+
 function buildMarketEvidenceCandidates(
   eventSlug: string,
   signals: MarketSignal[] | undefined
@@ -470,6 +487,61 @@ function resolveStance(claim: string): EvidenceCandidate["stance"] {
     return "supports_no";
   }
   return DEFAULT_STANCE;
+}
+
+function normalizeKeywords(keywords: string[]): string[] {
+  return keywords
+    .map((keyword) => normalizeText(keyword))
+    .filter((keyword) => keyword.length > 0);
+}
+
+function hasRecencyKeyword(claim: string, keywords: string[]): boolean {
+  if (keywords.length === 0) {
+    return false;
+  }
+  const normalized = normalizeText(claim);
+  if (!normalized) {
+    return false;
+  }
+  const padded = ` ${normalized} `;
+  const tokens = new Set(normalized.split(" ").filter(Boolean));
+  return keywords.some((keyword) => {
+    if (!keyword) {
+      return false;
+    }
+    if (keyword.includes(" ")) {
+      return padded.includes(` ${keyword} `);
+    }
+    return tokens.has(keyword);
+  });
+}
+
+function isWithinWindow(
+  publishedAtMs: number | null,
+  nowMs: number,
+  windowMs: number
+): boolean {
+  if (publishedAtMs === null) {
+    return false;
+  }
+  if (nowMs < publishedAtMs) {
+    return false;
+  }
+  return nowMs - publishedAtMs <= windowMs;
+}
+
+function isOlderThanWindow(
+  publishedAtMs: number | null,
+  nowMs: number,
+  windowMs: number
+): boolean {
+  if (publishedAtMs === null) {
+    return false;
+  }
+  if (nowMs < publishedAtMs) {
+    return false;
+  }
+  return nowMs - publishedAtMs > windowMs;
 }
 
 function buildCandidate(
@@ -576,6 +648,17 @@ export function buildEvidenceCandidates(
     });
   }
 
+  const config = validateEvidenceConfig(input.evidence_config ?? {});
+  const nowMs = input.now ? input.now() : Date.now();
+  const recencyWindowMs = config.novelty.new_within_hours * 60 * 60 * 1000;
+  const pricedWindowMs = config.novelty.priced_after_hours * 60 * 60 * 1000;
+  const changePct = resolveChange24hPct(input.market_signals);
+  const significantChange =
+    changePct !== null && changePct >= config.novelty.price_change_24h_pct;
+  const stableChange =
+    changePct !== null && changePct < config.novelty.price_change_24h_pct;
+  const recencyKeywords = normalizeKeywords(config.novelty.recency_keywords);
+
   const urlSeen = new Set<string>();
   const candidates: InternalCandidate[] = [];
   const marketCandidates = buildMarketEvidenceCandidates(
@@ -618,8 +701,27 @@ export function buildEvidenceCandidates(
 
   for (const group of groups) {
     const ordered = [...group].sort(compareCandidates);
+    const repeatedEnough =
+      ordered.length >= config.novelty.min_repeat_sources;
     ordered.forEach((item, index) => {
       const repeated = index !== 0;
+      const recentByTime = isWithinWindow(
+        item.published_at_ms,
+        nowMs,
+        recencyWindowMs
+      );
+      const oldByTime = isOlderThanWindow(
+        item.published_at_ms,
+        nowMs,
+        pricedWindowMs
+      );
+      const hasRecencyHint = hasRecencyKeyword(item.claim, recencyKeywords);
+      let novelty: EvidenceCandidate["novelty"] = DEFAULT_NOVELTY;
+      if (recentByTime || hasRecencyHint || significantChange) {
+        novelty = "new";
+      } else if (repeatedEnough || (oldByTime && stableChange)) {
+        novelty = "priced";
+      }
       flattened.push({
         source_type: item.source_type,
         url: item.url,
@@ -627,7 +729,7 @@ export function buildEvidenceCandidates(
         published_at: item.published_at,
         claim: item.claim,
         stance: item.stance,
-        novelty: item.novelty,
+        novelty,
         repeated,
         strength: item.strength,
         lane: item.lane,

@@ -383,4 +383,217 @@ describe("buildEvidenceCandidates", () => {
     expect(marketEvidence?.domain).toBe("polymarket.com");
     expect(marketEvidence?.query).toBe("market_behavior");
   });
+
+  it("marks novelty as new when published within 48h", () => {
+    const now = new Date("2025-01-10T00:00:00Z").valueOf();
+    const publishedAt = new Date(now - 47 * 60 * 60 * 1000).toISOString();
+    const tavilyResults: TavilyLaneResult[] = [
+      {
+        lane: "A",
+        query: "query A",
+        results: [
+          {
+            title: "Recent update",
+            url: "https://example.com/recent",
+            domain: "example.com",
+            published_at: publishedAt,
+            raw_content: "A recent update with neutral tone."
+          }
+        ]
+      }
+    ];
+
+    const { evidence_candidates } = buildEvidenceCandidates({
+      event_slug: "event-7",
+      tavily_results: tavilyResults,
+      now: () => now
+    });
+
+    expect(evidence_candidates[0]?.novelty).toBe("new");
+  });
+
+  it("marks novelty as new when recency keywords appear", () => {
+    const now = new Date("2025-01-10T00:00:00Z").valueOf();
+    const publishedAt = new Date(now - 100 * 60 * 60 * 1000).toISOString();
+    const tavilyResults: TavilyLaneResult[] = [
+      {
+        lane: "B",
+        query: "query B",
+        results: [
+          {
+            title: "Old report",
+            url: "https://example.com/old",
+            domain: "example.com",
+            published_at: publishedAt,
+            raw_content: "Breaking: officials just announced new guidance."
+          }
+        ]
+      }
+    ];
+
+    const { evidence_candidates } = buildEvidenceCandidates({
+      event_slug: "event-8",
+      tavily_results: tavilyResults,
+      now: () => now
+    });
+
+    expect(evidence_candidates[0]?.novelty).toBe("new");
+  });
+
+  it("does not treat recency keywords as substrings", () => {
+    const now = new Date("2025-01-10T00:00:00Z").valueOf();
+    const publishedAt = new Date(now - 100 * 60 * 60 * 1000).toISOString();
+    const tavilyResults: TavilyLaneResult[] = [
+      {
+        lane: "B",
+        query: "query B",
+        results: [
+          {
+            title: "Justice department update",
+            url: "https://example.com/justice",
+            domain: "example.com",
+            published_at: publishedAt,
+            raw_content: "Justice department released an update."
+          }
+        ]
+      }
+    ];
+
+    const { evidence_candidates } = buildEvidenceCandidates({
+      event_slug: "event-8b",
+      tavily_results: tavilyResults,
+      now: () => now
+    });
+
+    expect(evidence_candidates[0]?.novelty).toBe("unknown");
+  });
+
+  it("marks novelty as priced when repeated by at least three sources", () => {
+    const now = new Date("2025-01-10T00:00:00Z").valueOf();
+    const publishedAt = new Date(now - 60 * 60 * 60 * 1000).toISOString();
+    const resultA = {
+      title: "Same fact",
+      url: "https://example.com/source-1",
+      domain: "example.com",
+      published_at: publishedAt,
+      raw_content: "Same fact repeated."
+    };
+    const resultB = {
+      title: "Same fact",
+      url: "https://example.com/source-2",
+      domain: "example.com",
+      published_at: publishedAt,
+      raw_content: "Same fact repeated."
+    };
+    const resultC = {
+      title: "Same fact",
+      url: "https://example.com/source-3",
+      domain: "example.com",
+      published_at: publishedAt,
+      raw_content: "Same fact repeated."
+    };
+    const tavilyResults: TavilyLaneResult[] = [
+      { lane: "A", query: "query A", results: [resultA] },
+      { lane: "B", query: "query B", results: [resultB] },
+      { lane: "C", query: "query C", results: [resultC] }
+    ];
+
+    const { evidence_candidates } = buildEvidenceCandidates({
+      event_slug: "event-9",
+      tavily_results: tavilyResults,
+      now: () => now
+    });
+
+    expect(evidence_candidates[0]?.novelty).toBe("priced");
+  });
+
+  it("marks novelty as priced when old and market is stable", () => {
+    const now = new Date("2025-01-10T00:00:00Z").valueOf();
+    const publishedAt = new Date(now - 80 * 60 * 60 * 1000).toISOString();
+    const tavilyResults: TavilyLaneResult[] = [
+      {
+        lane: "A",
+        query: "query A",
+        results: [
+          {
+            title: "Older coverage",
+            url: "https://example.com/older",
+            domain: "example.com",
+            published_at: publishedAt,
+            raw_content: "Older coverage with no recency cues."
+          }
+        ]
+      }
+    ];
+
+    const clobSnapshot: ClobSnapshot = {
+      spread: 0.02,
+      midpoint: 0.5,
+      book_top_levels: [],
+      notable_walls: []
+    };
+
+    const priceContext: PriceContext = {
+      token_id: "token-2",
+      latest_price: 0.5,
+      midpoint_price: 0.5,
+      history_24h: [],
+      signals: {
+        change_1h: null,
+        change_4h: null,
+        change_24h: 0.02,
+        volatility_24h: null,
+        range_high_24h: null,
+        range_low_24h: null,
+        trend_slope_24h: null,
+        spike_flag: false
+      }
+    };
+
+    const marketSignals: MarketSignal[] = [
+      {
+        market_id: "market-2",
+        token_id: "token-2",
+        clob_snapshot: clobSnapshot,
+        price_context: priceContext
+      }
+    ];
+
+    const { evidence_candidates } = buildEvidenceCandidates({
+      event_slug: "event-10",
+      tavily_results: tavilyResults,
+      market_signals: marketSignals,
+      now: () => now
+    });
+
+    expect(evidence_candidates[0]?.novelty).toBe("priced");
+  });
+
+  it("defaults novelty to unknown when no rules match", () => {
+    const now = new Date("2025-01-10T00:00:00Z").valueOf();
+    const publishedAt = new Date(now - 60 * 60 * 60 * 1000).toISOString();
+    const tavilyResults: TavilyLaneResult[] = [
+      {
+        lane: "A",
+        query: "query A",
+        results: [
+          {
+            title: "Neutral coverage",
+            url: "https://example.com/neutral",
+            domain: "example.com",
+            published_at: publishedAt,
+            raw_content: "Neutral coverage with no recency cues."
+          }
+        ]
+      }
+    ];
+
+    const { evidence_candidates } = buildEvidenceCandidates({
+      event_slug: "event-11",
+      tavily_results: tavilyResults,
+      now: () => now
+    });
+
+    expect(evidence_candidates[0]?.novelty).toBe("unknown");
+  });
 });

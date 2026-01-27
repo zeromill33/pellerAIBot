@@ -33,7 +33,7 @@ tavily:
       max_results: 5
       time_range: "30d"
     D_chatter:
-      enabled: "conditional"          # 默认不跑；满足触发条件时必须启用
+      enabled: "always"               # 默认启用；如需节省额度可改为 conditional/never
       search_depth: "basic"
       max_results: 3
       time_range: "7d"

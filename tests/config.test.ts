@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   validateConfig,
+  validateEvidenceConfig,
   validateTelegramConfig,
   validateTavilyConfig
 } from "../src/config/config.schema.js";
@@ -82,5 +83,33 @@ describe("loadTavilyConfig", () => {
   it("loads api key from env", () => {
     const config = loadTavilyConfig({ TAVILY_API_KEY: "test_key" } as NodeJS.ProcessEnv);
     expect(config.api_key).toBe("test_key");
+  });
+});
+
+describe("evidence config validation", () => {
+  it("applies defaults for evidence config", () => {
+    const config = validateEvidenceConfig();
+    expect(config.novelty.new_within_hours).toBe(48);
+    expect(config.novelty.priced_after_hours).toBe(72);
+    expect(config.novelty.price_change_24h_pct).toBe(8);
+    expect(config.novelty.min_repeat_sources).toBe(3);
+    expect(config.novelty.recency_keywords.length).toBeGreaterThan(0);
+  });
+
+  it("allows novelty config overrides", () => {
+    const config = validateEvidenceConfig({
+      novelty: {
+        new_within_hours: 24,
+        priced_after_hours: 96,
+        price_change_24h_pct: 12,
+        min_repeat_sources: 4,
+        recency_keywords: ["flash", "breaking"]
+      }
+    });
+    expect(config.novelty.new_within_hours).toBe(24);
+    expect(config.novelty.priced_after_hours).toBe(96);
+    expect(config.novelty.price_change_24h_pct).toBe(12);
+    expect(config.novelty.min_repeat_sources).toBe(4);
+    expect(config.novelty.recency_keywords).toEqual(["flash", "breaking"]);
   });
 });
