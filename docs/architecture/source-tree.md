@@ -59,9 +59,13 @@
 │  │  │
 │  │  └─ llm/
 │  │     ├─ prompt.ts                      # prompt 加载与拼装（Report v1 / Query extract 可选）
-│  │     ├─ client.ts                      # LLM SDK/HTTP client（可接 OpenAI/其他供应商）
+│  │     ├─ client.ts                      # LLM SDK/HTTP client（adapter 共享基础封装）
 │  │     ├─ postprocess.ts                 # JSON parse、轻量修复（禁止自由文本）
 │  │     └─ index.ts                       # LLMProvider implements generateReportV1()
+│  │     └─ adapters/                      # LLM 适配器（供应商可替换）
+│  │        ├─ openai.ts                   # OpenAI 适配器
+│  │        ├─ anthropic.ts                # Anthropic 适配器
+│  │        └─ google.ts                   # Google/Gemini 适配器
 │  │
 │  ├─ validator/                           # 质量闸门（发布前必跑）
 │  │  ├─ schema/

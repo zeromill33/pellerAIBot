@@ -26,4 +26,40 @@ export interface LLMProvider {
 }
 ```
 
+#### E.4 推荐落地路径（可扩展但不复杂）
+
+目标：用**最小适配层**对接多家 LLM（OpenAI / Anthropic / Google），保持可替换性，避免引入重型框架。
+
+**推荐结构**
+- `src/providers/llm/`
+  - `prompt.ts`：拼装 system/user prompt（版本化）
+  - `postprocess.ts`：JSON parse + 轻量修复（禁止自由文本）
+  - `index.ts`：`LLMProvider` 实现与适配器选择
+  - `adapters/`
+    - `openai.ts`
+    - `anthropic.ts`
+    - `google.ts`
+
+**最小适配器接口（建议）**
+```ts
+export interface LLMAdapter {
+  generateJson(prompt: { system: string; user: string }, opts: {
+    model: string;
+    temperature?: number;
+  }): Promise<{ text: string; raw?: unknown }>;
+}
+```
+
+**实现要点**
+- `index.ts` 根据 `config.llm.provider` 选择适配器（`openai | anthropic | google`），并传入 `config.llm.model/temperature`。
+- 适配器只负责“把 prompt 送到模型并返回原始文本”，**不做业务逻辑**；业务逻辑统一在 `postprocess.ts` 与 Validator。
+- 保持“结构化 JSON 输出 + schema 校验”的主流程不变；失败直接阻断。
+- 新增模型/供应商时，只需新增一个 adapter 文件并注册即可。
+
+**配置建议（最小集）**
+- `llm.provider`: `openai | anthropic | google`
+- `llm.model`: 具体模型名（配置化）
+- `llm.temperature`: 默认低温（如 0~0.2）
+- `LLM_API_KEY_*`: 按供应商区分环境变量（仅注入，不落库）
+
 ---
