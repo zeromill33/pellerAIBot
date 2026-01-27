@@ -1,10 +1,12 @@
 import { createAppError, ERROR_CODES } from "../../orchestrator/errors.js";
 import { buildReportPrompt } from "./prompt.js";
 import { createOpenAICompatibleAdapter } from "./adapters/openai-compatible.js";
+import { postprocessReportV1Json } from "./postprocess.js";
 import type {
   LLMAdapter,
   LLMProvider,
   LLMProviderOptions,
+  LlmAuditEntry,
   LlmPromptInput,
   LlmReportInput,
   ReportV1Json
@@ -48,38 +50,33 @@ function buildPromptInput(input: LlmReportInput): LlmPromptInput {
   };
 }
 
+function defaultAudit(entry: LlmAuditEntry) {
+  console.info("[llm][report_v1]", entry);
+}
+
 export function createLLMProvider(options: LLMProviderOptions = {}): LLMProvider {
   return {
     async generateReportV1(input: LlmReportInput): Promise<ReportV1Json> {
       const adapter = resolveAdapter(options.adapter);
       const promptInput = buildPromptInput(input);
       const prompt = buildReportPrompt(promptInput);
+      const model = options.model ?? process.env.LLM_MODEL?.trim() ?? DEFAULT_MODEL;
+      const temperature =
+        options.temperature ??
+        parseTemperature(process.env.LLM_TEMPERATURE) ??
+        DEFAULT_TEMPERATURE;
+      const audit: LlmAuditEntry = {
+        prompt_name: prompt.prompt_name,
+        prompt_sha256: prompt.prompt_sha256,
+        model,
+        temperature
+      };
+      (options.onAudit ?? defaultAudit)(audit);
       const response = await adapter.generateJson(
         { system: prompt.system, user: prompt.user },
-        {
-          model:
-            options.model ??
-            process.env.LLM_MODEL?.trim() ??
-            DEFAULT_MODEL,
-          temperature:
-            options.temperature ??
-            parseTemperature(process.env.LLM_TEMPERATURE) ??
-            DEFAULT_TEMPERATURE
-        }
+        { model, temperature }
       );
-      try {
-        return JSON.parse(response.text) as ReportV1Json;
-      } catch (error) {
-        throw createAppError({
-          code: ERROR_CODES.PROVIDER_LLM_RESPONSE_INVALID,
-          message: "LLM response is not valid JSON",
-          category: "LLM",
-          retryable: false,
-          details: {
-            error: error instanceof Error ? error.message : String(error)
-          }
-        });
-      }
+      return postprocessReportV1Json(response.text);
     }
   };
 }

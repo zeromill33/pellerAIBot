@@ -109,6 +109,17 @@ function createStepClock(stepMs = 5) {
   };
 }
 
+function resolveDefaultStopStep(): string {
+  const ids = buildPublishPipelineSteps().map((step) => step.id);
+  if (ids.includes("report.validate")) {
+    return "report.validate";
+  }
+  if (ids.includes("telegram.render")) {
+    return "telegram.render";
+  }
+  return "report.generate";
+}
+
 function resolveEventSlug(url: string): string {
   const parsed = parseUrlsToSlugs([url]);
   const [slug] = parsed.event_slugs;
@@ -116,6 +127,84 @@ function resolveEventSlug(url: string): string {
     throw new Error("Expected valid Polymarket event URL");
   }
   return slug;
+}
+
+function buildMockReport(input: { context: { title: string; url: string; resolution_rules_raw: string } }) {
+  return {
+    context: {
+      title: input.context.title,
+      url: input.context.url,
+      resolution_rules_raw: input.context.resolution_rules_raw,
+      time_remaining: "10d",
+      market_odds: { yes: 55, no: 45 },
+      liquidity_proxy: {
+        gamma_liquidity: 1200,
+        book_depth_top10: 40,
+        spread: 0.02
+      }
+    },
+    market_framing: {
+      core_bet: "Core framing statement.",
+      key_assumption: "Key assumption text."
+    },
+    disagreement_map: {
+      pro: [
+        {
+          claim: "Evidence limited; awaiting official update.",
+          source_type: "市场行为",
+          url: input.context.url,
+          time: "N/A"
+        },
+        {
+          claim: "Market pricing partially reflects expectations.",
+          source_type: "市场行为",
+          url: input.context.url,
+          time: "N/A"
+        }
+      ],
+      con: [
+        {
+          claim: "Counterpoint based on media interpretation.",
+          source_type: "主流媒体",
+          url: "https://news.example.com/1",
+          time: "2026-01-01T00:00:00Z"
+        },
+        {
+          claim: "Social chatter highlights uncertainty.",
+          source_type: "社交讨论",
+          url: "https://social.example.com/1",
+          time: "2026-01-02T00:00:00Z"
+        }
+      ]
+    },
+    priced_vs_new: {
+      priced_in: [{ item: "Already partially priced in.", source_type: "官方公告" }],
+      new_info: [{ item: "New discussion surfaced.", source_type: "社交讨论" }]
+    },
+    sentiment: { samples: [], bias: "unknown", relation: "unknown" },
+    key_variables: [
+      {
+        name: "variable_one",
+        impact: "High impact",
+        observable_signals: "Official update"
+      }
+    ],
+    failure_modes: [
+      { mode: "Delay in announcement", observable_signals: "Official update delayed" },
+      { mode: "Policy reversal", observable_signals: "Sudden policy statement" }
+    ],
+    risk_attribution: ["info"],
+    limitations: {
+      cannot_detect: ["private negotiations", "off-record deals"],
+      not_included: ["no_bet_advice", "no_position_sizing"]
+    },
+    ai_vs_market: {
+      market_yes: 55,
+      ai_yes_beta: 60,
+      delta: 5,
+      drivers: ["Key evidence has not surfaced"]
+    }
+  };
 }
 
 type StepSummary = {
@@ -372,7 +461,7 @@ describeE2E("publish pipeline e2e", () => {
       const slug = resolveEventSlug(defaultUrl);
       const clock = createStepClock();
       const useLive = process.env.TEST_LIVE === "1";
-      const stopStepId = process.env.E2E_STOP_STEP ?? "report.generate";
+      const stopStepId = process.env.E2E_STOP_STEP ?? resolveDefaultStopStep();
       const topMarkets =
         process.env.E2E_TOP_MARKETS && Number.isFinite(Number(process.env.E2E_TOP_MARKETS))
           ? Number(process.env.E2E_TOP_MARKETS)
@@ -393,12 +482,7 @@ describeE2E("publish pipeline e2e", () => {
           };
         stepOptions.llmProvider = {
           async generateReportV1(input) {
-            return {
-              report_version: "mock",
-              context_title: input.context.title,
-              evidence_lanes: input.evidence.tavily_results.length,
-              has_clob: Boolean(input.clob)
-            };
+            return buildMockReport(input);
           }
         };
         if (forceChatter) {
@@ -498,7 +582,7 @@ describeE2E("publish pipeline e2e", () => {
       const stepSummaries: StepSummary[] = [];
       const slug = resolveEventSlug(liveDLaneUrl);
       const clock = createStepClock();
-      const stopStepId = process.env.E2E_STOP_STEP_D ?? "report.generate";
+      const stopStepId = process.env.E2E_STOP_STEP_D ?? resolveDefaultStopStep();
       const topMarkets =
         process.env.E2E_TOP_MARKETS && Number.isFinite(Number(process.env.E2E_TOP_MARKETS))
           ? Number(process.env.E2E_TOP_MARKETS)
@@ -524,12 +608,7 @@ describeE2E("publish pipeline e2e", () => {
             marketSignalsTopMarkets: topMarkets,
             llmProvider: {
               async generateReportV1(input) {
-                return {
-                  report_version: "mock",
-                  context_title: input.context.title,
-                  evidence_lanes: input.evidence.tavily_results.length,
-                  has_clob: Boolean(input.clob)
-                };
+                return buildMockReport(input);
               }
             }
           }

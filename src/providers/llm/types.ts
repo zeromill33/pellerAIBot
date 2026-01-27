@@ -47,10 +47,18 @@ export type LLMAdapter = {
   ): Promise<{ text: string; raw?: unknown }>;
 };
 
+export type LlmAuditEntry = {
+  prompt_name: string;
+  prompt_sha256: string;
+  model: string;
+  temperature: number;
+};
+
 export type LLMProviderOptions = {
   adapter?: LLMAdapter;
   model?: string;
   temperature?: number;
+  onAudit?: (entry: LlmAuditEntry) => void;
 };
 
 export type { MarketContext };
