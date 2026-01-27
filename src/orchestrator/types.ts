@@ -187,7 +187,7 @@ export type EvidenceSourceType =
   | "social"
   | "onchain";
 
-export type EvidenceStance = "pro" | "con" | "neutral";
+export type EvidenceStance = "supports_yes" | "supports_no" | "neutral";
 
 export type EvidenceNovelty = "new" | "priced" | "unknown";
 

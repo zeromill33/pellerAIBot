@@ -1,0 +1,39 @@
+schema: 1
+story: "4.3"
+story_title: "证据立场标注（supports_yes/supports_no/neutral）"
+gate: PASS
+status_reason: "立场判定规则确定且单测覆盖正反与否定优先场景，未发现关键质量风险。"
+reviewer: "Quinn (Test Architect)"
+updated: "2026-01-27T03:09:19Z"
+
+waiver: { active: false }
+
+top_issues: []
+
+risk_summary:
+  totals: { critical: 0, high: 0, medium: 0, low: 0 }
+  recommendations:
+    must_fix: []
+    monitor: []
+
+quality_score: 100
+expires: "2026-02-10T03:09:26Z"
+
+evidence:
+  tests_reviewed: 2
+  risks_identified: 0
+  trace:
+    ac_covered: [1, 2, 3]
+    ac_gaps: []
+
+nfr_validation:
+  security: { status: PASS, notes: "" }
+  performance: { status: PASS, notes: "" }
+  reliability: { status: PASS, notes: "" }
+  maintainability: { status: PASS, notes: "" }
+
+recommendations:
+  immediate: []
+  future:
+    - action: "补充中文/多语言关键词与相关单测，以提高非英语事件的立场判定覆盖"
+      refs: ["src/orchestrator/steps/evidence.build.step.ts"]

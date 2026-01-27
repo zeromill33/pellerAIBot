@@ -119,6 +119,92 @@ describe("buildEvidenceCandidates", () => {
     expect(candidate?.strength).toBe(1);
   });
 
+  it("labels stance when claims contain decisive cues", () => {
+    const tavilyResults: TavilyLaneResult[] = [
+      {
+        lane: "A",
+        query: "query A",
+        results: [
+          {
+            title: "Approval confirmed",
+            url: "https://example.com/approval",
+            domain: "example.com",
+            published_at: "2025-01-07T00:00:00Z",
+            raw_content: "Regulator approved the merger."
+          }
+        ]
+      },
+      {
+        lane: "C",
+        query: "query C",
+        results: [
+          {
+            title: "Denial issued",
+            url: "https://example.com/denial",
+            domain: "example.com",
+            published_at: "2025-01-08T00:00:00Z",
+            raw_content: "Agency denied the proposal after review."
+          }
+        ]
+      }
+    ];
+
+    const { evidence_candidates } = buildEvidenceCandidates({
+      event_slug: "event-3b",
+      tavily_results: tavilyResults
+    });
+
+    const byUrl = Object.fromEntries(
+      evidence_candidates.map((item) => [item.url, item])
+    );
+    expect(byUrl["https://example.com/approval"]?.stance).toBe("supports_yes");
+    expect(byUrl["https://example.com/denial"]?.stance).toBe("supports_no");
+  });
+
+  it("prioritizes explicit negation over positive keywords", () => {
+    const tavilyResults: TavilyLaneResult[] = [
+      {
+        lane: "A",
+        query: "query A",
+        results: [
+          {
+            title: "Won't close",
+            url: "https://example.com/wont-close",
+            domain: "example.com",
+            published_at: "2025-01-09T00:00:00Z",
+            raw_content: "Company said it won't close the exchange."
+          }
+        ]
+      },
+      {
+        lane: "B",
+        query: "query B",
+        results: [
+          {
+            title: "Not expected to",
+            url: "https://example.com/not-expected",
+            domain: "example.com",
+            published_at: "2025-01-10T00:00:00Z",
+            raw_content: "Regulator is not expected to approve the deal."
+          }
+        ]
+      }
+    ];
+
+    const { evidence_candidates } = buildEvidenceCandidates({
+      event_slug: "event-3c",
+      tavily_results: tavilyResults
+    });
+
+    const byUrl = Object.fromEntries(
+      evidence_candidates.map((item) => [item.url, item])
+    );
+    expect(byUrl["https://example.com/wont-close"]?.stance).toBe("supports_no");
+    expect(byUrl["https://example.com/not-expected"]?.stance).toBe(
+      "supports_no"
+    );
+  });
+
   it("assigns source_type by lane and domain rules", () => {
     const tavilyResults: TavilyLaneResult[] = [
       {

@@ -107,6 +107,123 @@ const OFFICIAL_PATH_HINTS = [
   "/newsroom"
 ];
 
+const STANCE_YES_KEYWORDS = new Set([
+  "confirm",
+  "confirmed",
+  "confirms",
+  "approve",
+  "approved",
+  "approves",
+  "pass",
+  "passed",
+  "passes",
+  "sign",
+  "signed",
+  "signs",
+  "ratify",
+  "ratified",
+  "ratifies",
+  "win",
+  "won",
+  "wins",
+  "elect",
+  "elected",
+  "elects",
+  "appoint",
+  "appointed",
+  "appoints",
+  "nominate",
+  "nominated",
+  "nominates",
+  "announce",
+  "announced",
+  "announces",
+  "launch",
+  "launched",
+  "launches",
+  "acquire",
+  "acquired",
+  "acquires",
+  "merge",
+  "merged",
+  "merger",
+  "settle",
+  "settled",
+  "settlement",
+  "resign",
+  "resigned",
+  "resigns",
+  "close",
+  "closed",
+  "complete",
+  "completed",
+  "submit",
+  "submitted",
+  "submits",
+  "file",
+  "filed",
+  "files"
+]);
+
+const STANCE_NO_KEYWORDS = new Set([
+  "deny",
+  "denied",
+  "denies",
+  "refute",
+  "refuted",
+  "refutes",
+  "reject",
+  "rejected",
+  "rejects",
+  "veto",
+  "vetoed",
+  "block",
+  "blocked",
+  "cancel",
+  "canceled",
+  "cancelled",
+  "scrap",
+  "scrapped",
+  "postpone",
+  "postponed",
+  "delay",
+  "delayed",
+  "lose",
+  "lost",
+  "loses",
+  "defeat",
+  "defeated",
+  "fails",
+  "fail",
+  "failed",
+  "withdraw",
+  "withdrawn",
+  "withdraws",
+  "refuse",
+  "refused",
+  "refuses",
+  "false",
+  "fake",
+  "hoax"
+]);
+
+const STANCE_YES_PHRASES = ["set to", "expected to"];
+
+const STANCE_NO_PHRASES = [
+  "did not",
+  "does not",
+  "do not",
+  "will not",
+  "won t",
+  "can t",
+  "cannot",
+  "not expected",
+  "unlikely",
+  "no evidence",
+  "rules out",
+  "ruled out"
+];
+
 const ALLOW_ONCHAIN_SOURCE_TYPES = false;
 
 type InternalCandidate = EvidenceCandidate & {
@@ -323,6 +440,38 @@ function buildClaim(result: TavilySearchResult): string {
   return truncateText(base, MAX_CLAIM_CHARS);
 }
 
+function hasKeyword(tokens: string[], keywords: Set<string>): boolean {
+  return tokens.some((token) => keywords.has(token));
+}
+
+function hasPhrase(normalized: string, phrases: string[]): boolean {
+  return phrases.some((phrase) => normalized.includes(phrase));
+}
+
+function resolveStance(claim: string): EvidenceCandidate["stance"] {
+  const normalized = normalizeText(claim);
+  if (!normalized) {
+    return DEFAULT_STANCE;
+  }
+  if (hasPhrase(normalized, STANCE_NO_PHRASES)) {
+    return "supports_no";
+  }
+  const tokens = normalized.split(" ").filter(Boolean);
+  const yesHit =
+    hasKeyword(tokens, STANCE_YES_KEYWORDS) ||
+    hasPhrase(normalized, STANCE_YES_PHRASES);
+  const noHit =
+    hasKeyword(tokens, STANCE_NO_KEYWORDS);
+
+  if (yesHit && !noHit) {
+    return "supports_yes";
+  }
+  if (noHit && !yesHit) {
+    return "supports_no";
+  }
+  return DEFAULT_STANCE;
+}
+
 function buildCandidate(
   lane: TavilyLaneResult,
   result: TavilySearchResult
@@ -340,13 +489,14 @@ function buildCandidate(
   const sourceType = resolveSourceType(lane.lane, domain, url);
   const publishedAtMs = parsePublishedAt(result.published_at);
 
+  const claim = buildClaim(result);
   const candidate: InternalCandidate = {
     source_type: sourceType,
     url,
     domain,
     published_at: result.published_at,
-    claim: buildClaim(result),
-    stance: DEFAULT_STANCE,
+    claim,
+    stance: resolveStance(claim),
     novelty: DEFAULT_NOVELTY,
     repeated: false,
     strength: DEFAULT_STRENGTH,
