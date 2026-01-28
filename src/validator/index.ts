@@ -2,6 +2,10 @@ import type { ErrorSuggestion } from "../orchestrator/errors.js";
 import { ERROR_CODES } from "../orchestrator/errors.js";
 import type { ReportV1Json } from "../providers/llm/types.js";
 import { validateReportSchema } from "./ajv.js";
+import {
+  validateContentGates,
+  type ContentGateConfig
+} from "./gates.js";
 
 export type ReportValidationSuccess = {
   ok: true;
@@ -19,6 +23,10 @@ export type ReportValidationFailure = {
 export type ReportValidationResult =
   | ReportValidationSuccess
   | ReportValidationFailure;
+
+export type ValidateReportOptions = {
+  gates?: Partial<ContentGateConfig>;
+};
 
 function parseReportJson(input: unknown):
   | { ok: true; value: unknown }
@@ -79,7 +87,10 @@ function formatSchemaErrors(errors: unknown[]): {
   };
 }
 
-export function validateReport(input: unknown): ReportValidationResult {
+export function validateReport(
+  input: unknown,
+  options: ValidateReportOptions = {}
+): ReportValidationResult {
   const parsed = parseReportJson(input);
   if (!parsed.ok) {
     return {
@@ -97,6 +108,20 @@ export function validateReport(input: unknown): ReportValidationResult {
       code: ERROR_CODES.VALIDATOR_SCHEMA_INVALID,
       message: formatted.message,
       details: formatted.details
+    };
+  }
+
+  const gateResult = validateContentGates(
+    parsed.value as ReportV1Json,
+    options.gates
+  );
+  if (!gateResult.ok) {
+    return {
+      ok: false,
+      code: gateResult.code,
+      message: gateResult.message,
+      suggestion: gateResult.suggestion,
+      details: gateResult.details
     };
   }
 

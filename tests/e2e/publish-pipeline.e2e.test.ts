@@ -152,19 +152,19 @@ function buildMockReport(input: { context: { title: string; url: string; resolut
     },
     disagreement_map: {
       pro: [
-        {
-          claim: "Evidence limited; awaiting official update.",
-          source_type: "市场行为",
-          url: input.context.url,
-          time: "N/A"
-        },
-        {
-          claim: "Market pricing partially reflects expectations.",
-          source_type: "市场行为",
-          url: input.context.url,
-          time: "N/A"
-        }
-      ],
+      {
+        claim: "Evidence limited; awaiting official update.",
+        source_type: "市场行为",
+        url: input.context.url,
+        time: "N/A"
+      },
+      {
+        claim: "Market pricing partially reflects expectations.",
+        source_type: "市场行为",
+        url: "https://official.example.com/statement",
+        time: "N/A"
+      }
+    ],
       con: [
         {
           claim: "Counterpoint based on media interpretation.",

@@ -30,7 +30,7 @@ const validReport = {
       {
         claim: "Market pricing partially reflects expectations.",
         source_type: "市场行为",
-        url: "https://polymarket.com/event/test",
+        url: "https://official.example.com/statement",
         time: "N/A"
       }
     ],
