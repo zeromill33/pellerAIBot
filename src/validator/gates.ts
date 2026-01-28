@@ -143,7 +143,7 @@ function normalizeConfig(input?: GateConfigInput): ContentGateConfig {
 
 function suggestionForEvidence(message: string): ErrorSuggestion {
   return {
-    action: "supplement_search",
+    action: "ADD_SEARCH",
     preferred_lane: "C",
     message
   };

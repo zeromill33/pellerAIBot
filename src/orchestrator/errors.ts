@@ -12,7 +12,7 @@ export type ErrorCategory =
   | "UNKNOWN";
 
 export type ErrorSuggestion = {
-  action: "retry" | "supplement_search" | "enable_lane";
+  action: "retry" | "supplement_search" | "enable_lane" | "ADD_SEARCH";
   preferred_lane?: "C" | "D";
   message?: string;
 };
@@ -52,6 +52,7 @@ export const ERROR_CODES = {
   STEP_QUERY_PLAN_EMPTY_INPUT: "STEP_QUERY_PLAN_EMPTY_INPUT",
   ORCH_BATCH_PIPELINE_FAILED: "ORCH_BATCH_PIPELINE_FAILED",
   ORCH_PIPELINE_FAILED: "ORCH_PIPELINE_FAILED",
+  ORCH_SUPPLEMENT_RATE_LIMIT: "ORCH_SUPPLEMENT_RATE_LIMIT",
   PROVIDER_PM_GAMMA_REQUEST_FAILED: "PROVIDER_PM_GAMMA_REQUEST_FAILED",
   PROVIDER_PM_GAMMA_EVENT_NOT_FOUND: "PROVIDER_PM_GAMMA_EVENT_NOT_FOUND",
   PROVIDER_PM_GAMMA_EVENT_NOT_UNIQUE: "PROVIDER_PM_GAMMA_EVENT_NOT_UNIQUE",

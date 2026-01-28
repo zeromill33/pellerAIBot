@@ -13,6 +13,7 @@ import type {
   EvidenceConfigInput,
   TavilyConfigInput
 } from "../config/config.schema.js";
+import { loadTavilyConfig } from "../config/load.js";
 import { fetchMarketContext } from "./steps/market.fetch.step.js";
 import { fetchMarketOrderbook } from "./steps/market.orderbook.fetch.step.js";
 import { mergeLiquidityProxy } from "./steps/market.liquidity.proxy.step.js";
@@ -26,6 +27,7 @@ import type { GammaProvider } from "../providers/polymarket/gamma.js";
 import type { ClobProvider } from "../providers/polymarket/clob.js";
 import type { PricingProvider } from "../providers/polymarket/pricing.js";
 import type { TavilyProvider } from "../providers/tavily/index.js";
+import { createTavilyProvider } from "../providers/tavily/index.js";
 import type { LLMProvider } from "../providers/llm/types.js";
 import type { ReportV1Json } from "../providers/llm/types.js";
 
@@ -83,6 +85,170 @@ type PublishPipelineRuntimeOptions = {
   logStep?: PipelineStepLogger;
   now?: () => number;
 };
+
+const SUPPLEMENT_ELIGIBLE_CODES = new Set([
+  ERROR_CODES.VALIDATOR_DISAGREEMENT_INSUFFICIENT,
+  ERROR_CODES.VALIDATOR_FAILURE_MODES_GENERIC,
+  ERROR_CODES.VALIDATOR_INSUFFICIENT_URLS
+]);
+
+const SUPPLEMENT_ACTIONS = new Set(["ADD_SEARCH", "supplement_search"]);
+
+function shouldSupplement(error: AppError): boolean {
+  if (error.suggestion?.action && SUPPLEMENT_ACTIONS.has(error.suggestion.action)) {
+    return true;
+  }
+  return SUPPLEMENT_ELIGIBLE_CODES.has(error.code);
+}
+
+function shouldEnableDLane(error: AppError): boolean {
+  if (error.suggestion?.preferred_lane === "D") {
+    return true;
+  }
+  return SUPPLEMENT_ELIGIBLE_CODES.has(error.code);
+}
+
+function buildSupplementTavilyConfig(
+  baseConfig: TavilyConfigInput | undefined,
+  enableDLane: boolean
+): TavilyConfigInput {
+  const lanes = {
+    ...(baseConfig?.lanes ?? {}),
+    C_counter: {
+      ...(baseConfig?.lanes?.C_counter ?? {}),
+      search_depth: "advanced"
+    },
+    ...(enableDLane
+      ? {
+          D_chatter: {
+            ...(baseConfig?.lanes?.D_chatter ?? {}),
+            enabled: "always"
+          }
+        }
+      : {})
+  };
+
+  return {
+    ...(baseConfig ?? {}),
+    lanes
+  };
+}
+
+function resolveSupplementTavilyProvider(
+  options: PipelineStepOptions | undefined,
+  configOverride: TavilyConfigInput
+): TavilyProvider {
+  if (options?.tavilyProvider) {
+    return options.tavilyProvider;
+  }
+  const baseConfig = loadTavilyConfig();
+  return createTavilyProvider({
+    config: {
+      ...configOverride,
+      api_key: baseConfig.api_key
+    }
+  });
+}
+
+async function runSupplementSearch(
+  ctx: PublishPipelineContext,
+  options: PipelineStepOptions,
+  reason: AppError
+): Promise<PublishPipelineContext> {
+  if (!ctx.market_context) {
+    throw reason;
+  }
+  const enableDLane = shouldEnableDLane(reason);
+  const tavilyConfig = buildSupplementTavilyConfig(
+    options.tavilyConfig,
+    enableDLane
+  );
+  const { query_plan } = buildTavilyQueryPlan({
+    request_id: ctx.request_id,
+    run_id: ctx.run_id,
+    market_context: ctx.market_context,
+    market_signals: ctx.market_signals,
+    evidence_candidates: ctx.evidence_candidates,
+    tavily_config: tavilyConfig
+  });
+
+  console.info({
+    message: "supplement.search.triggered",
+    step_id: "report.validate",
+    request_id: ctx.request_id,
+    run_id: ctx.run_id,
+    event_slug: ctx.event_slug,
+    reason_code: reason.code,
+    suggestion: reason.suggestion,
+    enable_d_lane: enableDLane,
+    query_count: query_plan.lanes.length,
+    queries: query_plan.lanes.map((lane) => ({ lane: lane.lane, query: lane.query }))
+  });
+
+  const tavilyProvider = resolveSupplementTavilyProvider(options, tavilyConfig);
+  let tavily_results: TavilyLaneResult[];
+  try {
+    ({ tavily_results } = await searchTavily(
+      {
+        request_id: ctx.request_id,
+        run_id: ctx.run_id,
+        event_slug: ctx.event_slug,
+        market_context: ctx.market_context,
+        query_plan
+      },
+      { provider: tavilyProvider }
+    ));
+  } catch (error) {
+    if (error instanceof AppError && error.category === "RATE_LIMIT") {
+      throw createAppError({
+        code: ERROR_CODES.ORCH_SUPPLEMENT_RATE_LIMIT,
+        message: "Tavily rate limit exceeded during supplement search",
+        category: "RATE_LIMIT",
+        retryable: true,
+        details: {
+          event_slug: ctx.event_slug,
+          reason_code: reason.code
+        },
+        suggestion: { action: "retry", message: "Tavily rate limit exceeded" }
+      });
+    }
+    throw error;
+  }
+
+  const { evidence_candidates } = buildEvidenceCandidates({
+    event_slug: ctx.event_slug,
+    tavily_results,
+    market_signals: ctx.market_signals,
+    evidence_config: options.evidenceConfig
+  });
+
+  const { report_json } = await generateReport(
+    {
+      request_id: ctx.request_id,
+      run_id: ctx.run_id,
+      event_slug: ctx.event_slug,
+      market_context: ctx.market_context,
+      clob_snapshot: ctx.clob_snapshot,
+      tavily_results,
+      market_signals: ctx.market_signals,
+      liquidity_proxy: ctx.liquidity_proxy
+    },
+    { provider: options.llmProvider }
+  );
+
+  const validated = await validateReportJson({
+    event_slug: ctx.event_slug,
+    report_json
+  });
+
+  return {
+    ...ctx,
+    query_plan,
+    tavily_results,
+    evidence_candidates,
+    report_json: validated.report_json
+  };
+}
 
 function toPipelineError(error: unknown, input: PublishPipelineInput): AppError {
   if (error instanceof AppError) {
@@ -331,6 +497,7 @@ async function runPublishPipelineSteps(
   }
 
   let ctx: PublishPipelineContext = { ...input };
+  let supplementAttempted = false;
   const now = options.now ?? (() => Date.now());
 
   for (const step of steps) {
@@ -365,6 +532,15 @@ async function runPublishPipelineSteps(
         error_category: appError.category
       };
       options.logStep?.(logEntry, ctx);
+      if (
+        step.id === "report.validate" &&
+        !supplementAttempted &&
+        shouldSupplement(appError)
+      ) {
+        supplementAttempted = true;
+        ctx = await runSupplementSearch(ctx, options.stepOptions ?? {}, appError);
+        continue;
+      }
       throw appError;
     }
 
