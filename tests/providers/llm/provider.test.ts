@@ -188,6 +188,26 @@ describe("LLM provider report postprocess", () => {
     });
   });
 
+  it("rejects ai_vs_market probability out of range", async () => {
+    const aiVsMarket = (validReport as { ai_vs_market: Record<string, unknown> })
+      .ai_vs_market;
+    const report = {
+      ...validReport,
+      ai_vs_market: {
+        ...aiVsMarket,
+        ai_yes_beta: 120
+      }
+    };
+    const provider = createLLMProvider({
+      adapter: createAdapter(JSON.stringify(report)),
+      onAudit: () => {}
+    });
+
+    await expect(provider.generateReportV1(baseInput)).rejects.toMatchObject({
+      code: ERROR_CODES.PROVIDER_LLM_RESPONSE_INVALID
+    });
+  });
+
   it("rejects invalid priced_vs_new source_type", async () => {
     const pricedVsNew = (validReport as { priced_vs_new: Record<string, unknown> })
       .priced_vs_new;
@@ -196,6 +216,86 @@ describe("LLM provider report postprocess", () => {
       priced_vs_new: {
         ...pricedVsNew,
         priced_in: [{ item: "Invalid type", source_type: "unknown" }]
+      }
+    };
+    const provider = createLLMProvider({
+      adapter: createAdapter(JSON.stringify(report)),
+      onAudit: () => {}
+    });
+
+    await expect(provider.generateReportV1(baseInput)).rejects.toMatchObject({
+      code: ERROR_CODES.PROVIDER_LLM_RESPONSE_INVALID
+    });
+  });
+
+  it("rejects ai_vs_market drivers length out of range", async () => {
+    const aiVsMarket = (validReport as { ai_vs_market: Record<string, unknown> })
+      .ai_vs_market;
+    const report = {
+      ...validReport,
+      ai_vs_market: {
+        ...aiVsMarket,
+        drivers: []
+      }
+    };
+    const provider = createLLMProvider({
+      adapter: createAdapter(JSON.stringify(report)),
+      onAudit: () => {}
+    });
+
+    await expect(provider.generateReportV1(baseInput)).rejects.toMatchObject({
+      code: ERROR_CODES.PROVIDER_LLM_RESPONSE_INVALID
+    });
+  });
+
+  it("rejects ai_vs_market drivers over limit", async () => {
+    const aiVsMarket = (validReport as { ai_vs_market: Record<string, unknown> })
+      .ai_vs_market;
+    const report = {
+      ...validReport,
+      ai_vs_market: {
+        ...aiVsMarket,
+        drivers: ["a", "b", "c", "d"]
+      }
+    };
+    const provider = createLLMProvider({
+      adapter: createAdapter(JSON.stringify(report)),
+      onAudit: () => {}
+    });
+
+    await expect(provider.generateReportV1(baseInput)).rejects.toMatchObject({
+      code: ERROR_CODES.PROVIDER_LLM_RESPONSE_INVALID
+    });
+  });
+
+  it("rejects ai_vs_market drivers with call-to-action language", async () => {
+    const aiVsMarket = (validReport as { ai_vs_market: Record<string, unknown> })
+      .ai_vs_market;
+    const report = {
+      ...validReport,
+      ai_vs_market: {
+        ...aiVsMarket,
+        drivers: ["建议买入该合约"]
+      }
+    };
+    const provider = createLLMProvider({
+      adapter: createAdapter(JSON.stringify(report)),
+      onAudit: () => {}
+    });
+
+    await expect(provider.generateReportV1(baseInput)).rejects.toMatchObject({
+      code: ERROR_CODES.PROVIDER_LLM_RESPONSE_INVALID
+    });
+  });
+
+  it("rejects ai_vs_market drivers with direct long/short keywords", async () => {
+    const aiVsMarket = (validReport as { ai_vs_market: Record<string, unknown> })
+      .ai_vs_market;
+    const report = {
+      ...validReport,
+      ai_vs_market: {
+        ...aiVsMarket,
+        drivers: ["long BTC is favored"]
       }
     };
     const provider = createLLMProvider({

@@ -10,6 +10,8 @@ export type LlmMarketContext = {
   title: string;
   url: string;
   resolution_rules_raw: string;
+  resolution_source_raw?: string;
+  time_remaining?: string;
   end_time?: string;
   market_odds_yes: number | null;
   market_odds_no: number | null;

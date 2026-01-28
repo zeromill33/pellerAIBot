@@ -101,6 +101,28 @@ function resolveMarketOdds(context: MarketContext): {
   };
 }
 
+function formatTimeRemaining(endTime?: string): string {
+  if (!endTime) {
+    return "N/A";
+  }
+  const endMs = Date.parse(endTime);
+  if (Number.isNaN(endMs)) {
+    return "N/A";
+  }
+  const diffMs = Math.max(0, endMs - Date.now());
+  const totalMinutes = Math.floor(diffMs / 60000);
+  const days = Math.floor(totalMinutes / (60 * 24));
+  const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
+  const minutes = totalMinutes % 60;
+  if (days > 0) {
+    return `${days}d ${hours}h`;
+  }
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  }
+  return `${minutes}m`;
+}
+
 function resolvePriceContext(
   context: MarketContext,
   marketSignals?: MarketSignal[]
@@ -195,7 +217,9 @@ function normalizeTavilyResults(
 function buildMarketContextInput(
   input: ReportGenerateInput
 ): LlmMarketContext {
-  const resolutionRules = input.market_context.resolution_rules_raw;
+  const resolutionRules =
+    input.market_context.resolution_rules_raw ??
+    input.market_context.description;
   if (!resolutionRules || resolutionRules.trim().length === 0) {
     throw createAppError({
       code: ERROR_CODES.STEP_REPORT_GENERATE_MISSING_INPUT,
@@ -207,10 +231,13 @@ function buildMarketContextInput(
   }
   const odds = resolveMarketOdds(input.market_context);
   const priceContext = resolvePriceContext(input.market_context, input.market_signals);
+  const timeRemaining = formatTimeRemaining(input.market_context.end_time);
   return {
     title: input.market_context.title,
     url: buildMarketUrl(input.market_context.slug),
     resolution_rules_raw: resolutionRules,
+    resolution_source_raw: input.market_context.resolution_source_raw,
+    time_remaining: timeRemaining,
     end_time: input.market_context.end_time,
     market_odds_yes: odds.yes,
     market_odds_no: odds.no,

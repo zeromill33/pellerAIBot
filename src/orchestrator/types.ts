@@ -77,6 +77,7 @@ export type MarketContext = {
   title: string;
   description?: string;
   resolution_rules_raw?: string;
+  resolution_source_raw?: string;
   end_time?: string;
   category?: string;
   markets: GammaMarket[];

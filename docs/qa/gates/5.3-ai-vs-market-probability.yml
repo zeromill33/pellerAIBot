@@ -1,0 +1,47 @@
+schema: 1
+story: "5.3"
+story_title: "AI 概率与市场概率输出（含免责声明与禁喊单）"
+gate: PASS
+status_reason: "AC2 不要求强一致校验；现有实现满足提示词与后处理约束，未发现阻塞性问题。"
+reviewer: "Quinn (Test Architect)"
+updated: "2026-01-28T06:33:00Z"
+
+waiver: { active: false }
+
+top_issues: []
+
+risk_summary:
+  totals: { critical: 0, high: 0, medium: 0, low: 0 }
+  recommendations:
+    must_fix: []
+    monitor: []
+
+quality_score: 100
+expires: "2026-02-11T06:33:00Z"
+
+evidence:
+  tests_reviewed: 3
+  risks_identified: 0
+  trace:
+    ac_covered: [1, 2, 3, 4, 5, 6]
+    ac_gaps: []
+
+nfr_validation:
+  security:
+    status: PASS
+    notes: "未发现直接安全问题；注意密钥轮换与 .env 管理。"
+  performance:
+    status: PASS
+    notes: "Prompt 体积增大可能带来轻微延迟，但可接受。"
+  reliability:
+    status: PASS
+    notes: "LLM 输出错误会被后处理拦截；一致性校验仍需补齐。"
+  maintainability:
+    status: PASS
+    notes: ""
+
+recommendations:
+  immediate: []
+  future:
+    - action: "如需可回放性，可为 time_remaining 引入可注入时钟"
+      refs: ["src/orchestrator/steps/report.generate.step.ts"]

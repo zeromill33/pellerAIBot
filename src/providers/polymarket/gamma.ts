@@ -394,6 +394,7 @@ function mapGammaEvent(raw: unknown): {
   title: string;
   description?: string;
   resolutionRules?: string;
+  resolutionSource?: string;
   endTime?: string;
   marketsRaw?: unknown[];
 } {
@@ -412,10 +413,14 @@ function mapGammaEvent(raw: unknown): {
     toOptionalString(record.description) ||
     toOptionalString(record.summary) ||
     toOptionalString(record.market_description);
+  const resolutionSource =
+    toOptionalString(record.resolutionSource) ||
+    toOptionalString(record.resolution_source);
   const resolutionRules =
     toOptionalString(record.resolution_rules) ||
     toOptionalString(record.resolutionRules) ||
-    toOptionalString(record.resolution_rules_raw);
+    toOptionalString(record.resolution_rules_raw) ||
+    description;
   const endTime =
     toOptionalString(record.end_time) ||
     toOptionalString(record.endDate) ||
@@ -428,6 +433,7 @@ function mapGammaEvent(raw: unknown): {
     title,
     description,
     resolutionRules,
+    resolutionSource,
     endTime,
     marketsRaw: marketsRaw ?? undefined
   };
@@ -611,6 +617,7 @@ export function createGammaProvider(
       title: event.title,
       description: event.description,
       resolution_rules_raw: event.resolutionRules,
+      resolution_source_raw: event.resolutionSource,
       end_time: event.endTime,
       markets,
       primary_market_id: primaryMarket.market_id,

@@ -13,11 +13,14 @@ import { parseUrlsToSlugs } from "../../src/orchestrator/steps/url.parse.step.js
 import { createGammaProvider } from "../../src/providers/polymarket/gamma.js";
 import { createClobProvider } from "../../src/providers/polymarket/clob.js";
 import { createPricingProvider } from "../../src/providers/polymarket/pricing.js";
+import { createLLMProvider } from "../../src/providers/llm/index.js";
 
 // RUN_E2E=1 启用；TEST_LIVE=1 走真实 provider（需网络/必要密钥，默认走 fixtures）。
+// E2E_LLM_LIVE=1 使用真实 LLM（需 LLM_API_KEY，默认 mock）。
 // 可选：E2E_EVENT_URL 覆盖 URL，E2E_STOP_STEP 覆盖停止的 step，E2E_FORCE_D=1 强制 D 车道，
 // 额外：E2E_EVENT_URL_D 指定“自然触发 D 车道”的 live 用例 URL，E2E_STOP_STEP_D 覆盖停止 step，
 // E2E_TOP_MARKETS 控制 market.signals 探测数量（默认 3），
+// E2E_TIMEOUT_MS 可覆盖单测超时时间（毫秒）。
 // E2E_SUMMARY_PATH 指定输出摘要文件路径（默认 tests/e2e/tmp/e2e-step-summary.json），
 // E2E_SUMMARY_PATH_D 指定 D 车道用例摘要路径（默认 tests/e2e/tmp/e2e-step-summary-dlane.json）。
 const describeE2E = process.env.RUN_E2E === "1" ? describe : describe.skip;
@@ -406,6 +409,7 @@ function buildStepSummary(
       ...base,
       result: {
         report_keys: reportKeys,
+        report_path: "tests/e2e/tmp/report.json",
         tavily_lane_count: context.tavily_results?.length ?? 0
       }
     };
@@ -428,8 +432,15 @@ describeE2E("publish pipeline e2e", () => {
     "https://polymarket.com/event/who-will-trump-nominate-as-fed-chair";
   const forceChatter = process.env.E2E_FORCE_D === "1";
   const liveDLaneUrl = process.env.E2E_EVENT_URL_D ?? "";
+  const timeoutOverride = Number(process.env.E2E_TIMEOUT_MS);
   const testTimeoutMs =
-    process.env.TEST_LIVE === "1" ? (forceChatter ? 60000 : 30000) : 5000;
+    Number.isFinite(timeoutOverride) && timeoutOverride > 0
+      ? Math.floor(timeoutOverride)
+      : process.env.TEST_LIVE === "1"
+        ? forceChatter
+          ? 60000
+          : 30000
+        : 5000;
   const runLiveDLane =
     process.env.TEST_LIVE === "1" && liveDLaneUrl.trim().length > 0;
 
@@ -461,6 +472,7 @@ describeE2E("publish pipeline e2e", () => {
       const slug = resolveEventSlug(defaultUrl);
       const clock = createStepClock();
       const useLive = process.env.TEST_LIVE === "1";
+      const useLiveLlm = process.env.E2E_LLM_LIVE === "1";
       const stopStepId = process.env.E2E_STOP_STEP ?? resolveDefaultStopStep();
       const topMarkets =
         process.env.E2E_TOP_MARKETS && Number.isFinite(Number(process.env.E2E_TOP_MARKETS))
@@ -480,11 +492,13 @@ describeE2E("publish pipeline e2e", () => {
             pricingProvider: createPricingFixtureProvider(),
             marketSignalsTopMarkets: topMarkets
           };
-        stepOptions.llmProvider = {
-          async generateReportV1(input) {
-            return buildMockReport(input);
-          }
-        };
+        stepOptions.llmProvider = useLiveLlm
+          ? createLLMProvider()
+          : {
+            async generateReportV1(input) {
+              return buildMockReport(input);
+            }
+          };
         if (forceChatter) {
           stepOptions.tavilyConfig = {
             lanes: {
@@ -557,6 +571,9 @@ describeE2E("publish pipeline e2e", () => {
         const summaryPath =
           process.env.E2E_SUMMARY_PATH ?? "tests/e2e/tmp/e2e-step-summary.json";
         writeSummaryFile(summaryPath, summaryPayload);
+        if (context.report_json) {
+          writeSummaryFile("tests/e2e/tmp/report.json", context.report_json);
+        }
         for (const summary of stepSummaries) {
           console.info("[e2e][step]", summary.step_id, summary.result);
         }
@@ -582,6 +599,7 @@ describeE2E("publish pipeline e2e", () => {
       const stepSummaries: StepSummary[] = [];
       const slug = resolveEventSlug(liveDLaneUrl);
       const clock = createStepClock();
+      const useLiveLlm = process.env.E2E_LLM_LIVE === "1";
       const stopStepId = process.env.E2E_STOP_STEP_D ?? resolveDefaultStopStep();
       const topMarkets =
         process.env.E2E_TOP_MARKETS && Number.isFinite(Number(process.env.E2E_TOP_MARKETS))
@@ -606,11 +624,13 @@ describeE2E("publish pipeline e2e", () => {
             clobProvider: createClobProvider(),
             pricingProvider: createPricingProvider(),
             marketSignalsTopMarkets: topMarkets,
-            llmProvider: {
-              async generateReportV1(input) {
-                return buildMockReport(input);
+            llmProvider: useLiveLlm
+              ? createLLMProvider()
+              : {
+                async generateReportV1(input) {
+                  return buildMockReport(input);
+                }
               }
-            }
           }
         }
       );

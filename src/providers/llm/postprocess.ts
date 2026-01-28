@@ -30,6 +30,10 @@ const ALLOWED_RISK_ATTRIBUTION = new Set([
 ]);
 
 const REQUIRED_NOT_INCLUDED = ["no_bet_advice", "no_position_sizing"] as const;
+const CALL_TO_ACTION_PATTERNS: RegExp[] = [
+  /买入|卖出|做多|做空|加仓|减仓|止损|止盈|下注|押注|梭哈|仓位管理|资金管理/,
+  /\b(buy|sell|long|short|go long|go short|bet|wager|stop loss|take profit|position sizing|position size|all in)\b/i
+];
 
 type ReportObject = Record<string, unknown>;
 
@@ -62,6 +66,14 @@ function expectNonEmptyString(value: unknown, path: string): string {
     invalid(`Expected non-empty string at ${path}`, { path });
   }
   return value;
+}
+
+function assertNoCallToAction(text: string, path: string) {
+  for (const pattern of CALL_TO_ACTION_PATTERNS) {
+    if (pattern.test(text)) {
+      invalid("Call-to-action language detected", { path, text });
+    }
+  }
 }
 
 function expectNumberInRange(
@@ -153,6 +165,7 @@ function validateAiVsMarket(report: ReportObject) {
   const aiVsMarket = expectObject(report.ai_vs_market, "ai_vs_market");
   expectNumberInRange(aiVsMarket.market_yes, 0, 100, "ai_vs_market.market_yes");
   expectNumberInRange(aiVsMarket.ai_yes_beta, 0, 100, "ai_vs_market.ai_yes_beta");
+  expectNumberInRange(aiVsMarket.delta, -100, 100, "ai_vs_market.delta");
   const drivers = expectArray(aiVsMarket.drivers, "ai_vs_market.drivers");
   if (drivers.length < 1 || drivers.length > 3) {
     invalid("ai_vs_market.drivers must be length 1-3", {
@@ -160,7 +173,8 @@ function validateAiVsMarket(report: ReportObject) {
     });
   }
   drivers.forEach((driver, index) => {
-    expectNonEmptyString(driver, `ai_vs_market.drivers[${index}]`);
+    const text = expectNonEmptyString(driver, `ai_vs_market.drivers[${index}]`);
+    assertNoCallToAction(text, `ai_vs_market.drivers[${index}]`);
   });
 }
 

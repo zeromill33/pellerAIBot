@@ -12,8 +12,15 @@ SYSTEM:
 4) sentiment 为抽样：若无可靠样本，samples 为空数组，bias/relation 为 unknown。
 5) 概率全部用 0-100。
 6) resolution_rules_raw 必须原样保留（来自 Polymarket/Gamma）。
-7) price signals 只能作为“市场行为”补充信号，不允许仅凭价格下结论；如需引用价格信号，必须在条目中标明其窗口（如 24h）并绑定 market url，source_type 使用“市场行为”。
-8) price signals 为代码侧派生指标（见 price_context.signals），用于辅助判断 priced_in vs new。
+   - 若输入 market_context.resolution_rules_raw 为空，系统会回退为 event.description。
+   - 若提供 market_context.resolution_source_raw，可作为结算来源参考，但不得臆造。
+7) time_remaining 必须基于 market_context.end_time 计算；若提供 market_context.time_remaining，直接使用。
+8) price signals 只能作为“市场行为”补充信号，不允许仅凭价格下结论；如需引用价格信号，必须在条目中标明其窗口（如 24h）并绑定 market url，source_type 使用“市场行为”。
+9) price signals 为代码侧派生指标（见 price_context.signals），用于辅助判断 priced_in vs new。
+10) ai_vs_market 必须包含 {market_yes, ai_yes_beta, delta, drivers}：
+   - market_yes 与 context.market_odds.yes 同口径（0-100）
+   - drivers 为 1-3 条“差值驱动证据”，不得包含下注/资金管理建议措辞
+11) limitations.not_included 必须包含 no_bet_advice 与 no_position_sizing（固定免责声明）。
 
 USER:
 给定以下输入数据：
@@ -26,3 +33,206 @@ USER:
 若 history_24h 点位不足，signals 各字段可能为空。
 
 请基于这些数据，生成符合 ReportV1 schema 的 JSON 报告。
+
+下面是 ReportV1 JSON Schema（仅用于约束与校验，**不要输出 schema 本体**）：
+你必须输出**符合该 schema 的 JSON 实例**，且**输出只包含实例本身**，不得包含任何 `$schema/title/properties/$defs` 等 schema 字段。
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ReportV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "context",
+    "market_framing",
+    "disagreement_map",
+    "priced_vs_new",
+    "sentiment",
+    "key_variables",
+    "failure_modes",
+    "risk_attribution",
+    "limitations",
+    "ai_vs_market"
+  ],
+  "properties": {
+    "context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "title",
+        "url",
+        "resolution_rules_raw",
+        "time_remaining",
+        "market_odds",
+        "liquidity_proxy"
+      ],
+      "properties": {
+        "title": { "type": "string", "minLength": 1 },
+        "url": { "type": "string", "minLength": 1 },
+        "resolution_rules_raw": { "type": "string", "minLength": 1 },
+        "time_remaining": { "type": "string", "minLength": 1 },
+        "market_odds": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["yes", "no"],
+          "properties": {
+            "yes": { "type": "number", "minimum": 0, "maximum": 100 },
+            "no": { "type": "number", "minimum": 0, "maximum": 100 }
+          }
+        },
+        "liquidity_proxy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["gamma_liquidity", "book_depth_top10", "spread"],
+          "properties": {
+            "gamma_liquidity": { "type": ["number", "null"], "minimum": 0 },
+            "book_depth_top10": { "type": ["number", "null"], "minimum": 0 },
+            "spread": { "type": ["number", "null"], "minimum": 0 }
+          }
+        }
+      }
+    },
+    "market_framing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["core_bet", "key_assumption"],
+      "properties": {
+        "core_bet": { "type": "string", "minLength": 1 },
+        "key_assumption": { "type": "string", "minLength": 1 }
+      }
+    },
+    "disagreement_map": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pro", "con"],
+      "properties": {
+        "pro": { "type": "array", "minItems": 2, "items": { "$ref": "#/$defs/evidenceItem" } },
+        "con": { "type": "array", "minItems": 2, "items": { "$ref": "#/$defs/evidenceItem" } }
+      }
+    },
+    "priced_vs_new": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["priced_in", "new_info"],
+      "properties": {
+        "priced_in": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/pricedItem" } },
+        "new_info": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/pricedItem" } }
+      }
+    },
+    "sentiment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bias", "relation", "samples"],
+      "properties": {
+        "bias": { "type": "string", "enum": ["optimistic", "pessimistic", "neutral", "unknown"] },
+        "relation": { "type": "string", "enum": ["reinforces", "diverges", "none", "unknown"] },
+        "samples": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["url", "summary"],
+            "properties": {
+              "url": { "type": "string" },
+              "summary": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "key_variables": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 2,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "impact", "observable_signals"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "impact": { "type": "string", "minLength": 1 },
+          "observable_signals": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "failure_modes": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["mode", "observable_signals"],
+        "properties": {
+          "mode": { "type": "string", "minLength": 1 },
+          "observable_signals": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "risk_attribution": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "enum": ["info", "interpretation", "time", "market_structure"]
+      }
+    },
+    "limitations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cannot_detect", "not_included"],
+      "properties": {
+        "cannot_detect": { "type": "array", "minItems": 2, "items": { "type": "string" } },
+        "not_included": {
+          "type": "array",
+          "minItems": 2,
+          "items": { "type": "string", "enum": ["no_bet_advice", "no_position_sizing"] }
+        }
+      }
+    },
+    "ai_vs_market": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["market_yes", "ai_yes_beta", "delta", "drivers"],
+      "properties": {
+        "market_yes": { "type": "number", "minimum": 0, "maximum": 100 },
+        "ai_yes_beta": { "type": "number", "minimum": 0, "maximum": 100 },
+        "delta": { "type": "number", "minimum": -100, "maximum": 100 },
+        "drivers": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 3,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "evidenceItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["claim", "source_type", "url", "time"],
+      "properties": {
+        "claim": { "type": "string", "minLength": 1 },
+        "source_type": {
+          "type": "string",
+          "enum": ["官方公告", "主流媒体", "社交讨论", "链上数据", "市场行为"]
+        },
+        "url": { "type": "string", "minLength": 1 },
+        "time": { "type": "string", "minLength": 1 }
+      }
+    },
+    "pricedItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["item", "source_type"],
+      "properties": {
+        "item": { "type": "string", "minLength": 1 },
+        "source_type": {
+          "type": "string",
+          "enum": ["官方公告", "主流媒体", "社交讨论", "链上数据", "市场行为"]
+        }
+      }
+    }
+  }
+}
+```
