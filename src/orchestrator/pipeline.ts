@@ -21,6 +21,7 @@ import { buildTavilyQueryPlan } from "./steps/query.plan.build.step.js";
 import { searchTavily } from "./steps/search.tavily.step.js";
 import { buildEvidenceCandidates } from "./steps/evidence.build.step.js";
 import { generateReport } from "./steps/report.generate.step.js";
+import { validateReportJson } from "./steps/report.validate.step.js";
 import type { GammaProvider } from "../providers/polymarket/gamma.js";
 import type { ClobProvider } from "../providers/polymarket/clob.js";
 import type { PricingProvider } from "../providers/polymarket/pricing.js";
@@ -286,6 +287,27 @@ function buildPublishPipelineSteps(
           },
           { provider: options.llmProvider }
         );
+        return { ...ctx, report_json };
+      }
+    },
+    {
+      id: "report.validate",
+      input_keys: ["ReportV1Json"],
+      output_keys: ["ReportV1Json"],
+      run: async (ctx) => {
+        if (ctx.report_json === null || ctx.report_json === undefined) {
+          throw createAppError({
+            code: ERROR_CODES.STEP_REPORT_VALIDATE_MISSING_INPUT,
+            message: "Missing report_json for report.validate",
+            category: "VALIDATION",
+            retryable: false,
+            details: { event_slug: ctx.event_slug }
+          });
+        }
+        const { report_json } = await validateReportJson({
+          event_slug: ctx.event_slug,
+          report_json: ctx.report_json
+        });
         return { ...ctx, report_json };
       }
     }
