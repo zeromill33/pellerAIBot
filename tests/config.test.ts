@@ -3,9 +3,14 @@ import {
   validateConfig,
   validateEvidenceConfig,
   validateTelegramConfig,
-  validateTavilyConfig
+  validateTavilyConfig,
+  validatePublishConfig
 } from "../src/config/config.schema.js";
-import { loadTavilyConfig, parseAdminUserIds } from "../src/config/load.js";
+import {
+  loadTavilyConfig,
+  parseAdminUserIds,
+  loadPublishConfig
+} from "../src/config/load.js";
 
 describe("config validation", () => {
   it("fails when admin_user_ids is missing", () => {
@@ -111,5 +116,42 @@ describe("evidence config validation", () => {
     expect(config.novelty.price_change_24h_pct).toBe(12);
     expect(config.novelty.min_repeat_sources).toBe(4);
     expect(config.novelty.recency_keywords).toEqual(["flash", "breaking"]);
+  });
+});
+
+describe("publish config validation", () => {
+  it("applies defaults for publish config", () => {
+    const config = validatePublishConfig();
+    expect(config.strategy).toBe("approve");
+    expect(config.parse_mode).toBe("Markdown");
+    expect(config.disable_web_page_preview).toBe(true);
+  });
+
+  it("accepts publish config overrides", () => {
+    const config = validatePublishConfig({
+      strategy: "auto",
+      channel_chat_id: "-1001",
+      parse_mode: "HTML",
+      disable_web_page_preview: false
+    });
+    expect(config.strategy).toBe("auto");
+    expect(config.channel_chat_id).toBe("-1001");
+    expect(config.parse_mode).toBe("HTML");
+    expect(config.disable_web_page_preview).toBe(false);
+  });
+});
+
+describe("loadPublishConfig", () => {
+  it("loads publish config from env", () => {
+    const config = loadPublishConfig({
+      PUBLISH_STRATEGY: "auto",
+      TG_CHANNEL_CHAT_ID: "-1002",
+      TG_PARSE_MODE: "MarkdownV2",
+      TG_DISABLE_PREVIEW: "0"
+    } as NodeJS.ProcessEnv);
+    expect(config.strategy).toBe("auto");
+    expect(config.channel_chat_id).toBe("-1002");
+    expect(config.parse_mode).toBe("MarkdownV2");
+    expect(config.disable_web_page_preview).toBe(false);
   });
 });

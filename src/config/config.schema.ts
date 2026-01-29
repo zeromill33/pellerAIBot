@@ -1,4 +1,8 @@
-import { DEFAULT_EVIDENCE_CONFIG, DEFAULT_TAVILY_CONFIG } from "./defaults.js";
+import {
+  DEFAULT_EVIDENCE_CONFIG,
+  DEFAULT_PUBLISH_CONFIG,
+  DEFAULT_TAVILY_CONFIG
+} from "./defaults.js";
 
 export type BotConfig = {
   admin_user_ids: number[];
@@ -7,6 +11,17 @@ export type BotConfig = {
 export type TelegramBotConfig = BotConfig & {
   bot_token: string;
 };
+
+export type PublishStrategy = "auto" | "approve";
+
+export type PublishConfig = {
+  strategy: PublishStrategy;
+  channel_chat_id?: string;
+  parse_mode?: "Markdown" | "MarkdownV2" | "HTML";
+  disable_web_page_preview?: boolean;
+};
+
+export type PublishConfigInput = Partial<PublishConfig>;
 
 export type TavilySearchDepth = "basic" | "advanced";
 
@@ -390,6 +405,36 @@ export function validateTavilyConfig(
         "lanes.D_chatter"
       )
     }
+  };
+}
+
+export function validatePublishConfig(
+  raw: PublishConfigInput = {}
+): PublishConfig {
+  const defaults = DEFAULT_PUBLISH_CONFIG;
+  const strategy = raw.strategy ?? defaults.strategy;
+  if (strategy !== "auto" && strategy !== "approve") {
+    throw new Error("publish_strategy must be auto or approve");
+  }
+
+  const parseMode = raw.parse_mode ?? defaults.parse_mode;
+  if (
+    parseMode !== undefined &&
+    !["Markdown", "MarkdownV2", "HTML"].includes(parseMode)
+  ) {
+    throw new Error("publish.parse_mode must be Markdown, MarkdownV2, or HTML");
+  }
+
+  const channelChatId = raw.channel_chat_id?.trim();
+
+  return {
+    strategy,
+    channel_chat_id: channelChatId && channelChatId.length > 0 ? channelChatId : undefined,
+    parse_mode: parseMode,
+    disable_web_page_preview: normalizeBoolean(
+      raw.disable_web_page_preview,
+      defaults.disable_web_page_preview ?? true
+    )
   };
 }
 

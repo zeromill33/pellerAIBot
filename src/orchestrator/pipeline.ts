@@ -11,10 +11,11 @@ import type {
 } from "./types.js";
 import type {
   EvidenceConfigInput,
+  PublishConfigInput,
   TavilyConfigInput,
   TavilySearchDepth
 } from "../config/config.schema.js";
-import { loadTavilyConfig } from "../config/load.js";
+import { loadPublishConfig, loadTavilyConfig } from "../config/load.js";
 import { fetchMarketContext } from "./steps/market.fetch.step.js";
 import { fetchMarketOrderbook } from "./steps/market.orderbook.fetch.step.js";
 import { mergeLiquidityProxy } from "./steps/market.liquidity.proxy.step.js";
@@ -25,6 +26,7 @@ import { buildEvidenceCandidates } from "./steps/evidence.build.step.js";
 import { generateReport } from "./steps/report.generate.step.js";
 import { validateReportJson } from "./steps/report.validate.step.js";
 import { renderTelegramDraft } from "./steps/telegram.render.step.js";
+import { publishTelegramMessage } from "./steps/telegram.publish.step.js";
 import { persistEventEvidenceReport } from "./steps/persist.step.js";
 import type { GammaProvider } from "../providers/polymarket/gamma.js";
 import type { ClobProvider } from "../providers/polymarket/clob.js";
@@ -34,6 +36,7 @@ import { createTavilyProvider } from "../providers/tavily/index.js";
 import type { LLMProvider } from "../providers/llm/types.js";
 import type { ReportV1Json } from "../providers/llm/types.js";
 import type { StorageAdapter } from "../storage/index.js";
+import type { TelegramPublisher } from "../providers/telegram/index.js";
 
 type PublishPipelineContext = PublishPipelineInput & {
   market_context?: MarketContext;
@@ -78,8 +81,10 @@ type PipelineStepOptions = {
   tavilyProvider?: TavilyProvider;
   llmProvider?: LLMProvider;
   storage?: StorageAdapter;
+  telegramPublisher?: TelegramPublisher;
   tavilyConfig?: TavilyConfigInput;
   evidenceConfig?: EvidenceConfigInput;
+  publishConfig?: PublishConfigInput;
   marketSignalsTopMarkets?: number;
   marketSignalsWindowHours?: number;
   marketSignalsIntervalHours?: number;
@@ -154,6 +159,16 @@ function resolveSupplementTavilyProvider(
       api_key: baseConfig.api_key
     }
   });
+}
+
+function resolvePublishConfig(
+  options: PipelineStepOptions | undefined
+): PublishConfigInput {
+  const base = loadPublishConfig();
+  return {
+    ...base,
+    ...(options?.publishConfig ?? {})
+  };
 }
 
 async function runSupplementSearch(
@@ -531,6 +546,29 @@ function buildPublishPipelineSteps(
             market_signals: ctx.market_signals
           },
           { storage: options.storage, status: "ready" }
+        );
+        return { ...ctx };
+      }
+    },
+    {
+      id: "telegram.publish",
+      input_keys: ["tg_post_text"],
+      output_keys: ["message_id"],
+      run: async (ctx) => {
+        const publishConfig = resolvePublishConfig(options);
+        if (publishConfig.strategy !== "auto") {
+          return { ...ctx };
+        }
+        await publishTelegramMessage(
+          {
+            event_slug: ctx.event_slug,
+            run_id: ctx.run_id,
+            tg_post_text: ctx.tg_post_text
+          },
+          {
+            publisher: options.telegramPublisher,
+            storage: options.storage
+          }
         );
         return { ...ctx };
       }

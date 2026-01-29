@@ -2,13 +2,21 @@ import type { SqliteDatabase } from "./db.js";
 import { openSqliteDatabase } from "./db.js";
 import { upsertEvent, type EventRecord } from "./event.repo.js";
 import { appendEvidence, type EvidenceRecord } from "./evidence.repo.js";
-import { saveReport, getLatestReport, type ReportRecord, type ReportStatusRecord } from "./report.repo.js";
+import {
+  saveReport,
+  getLatestReport,
+  updateReportPublish,
+  type ReportRecord,
+  type ReportStatusRecord,
+  type ReportPublishUpdate
+} from "./report.repo.js";
 
 export type StorageAdapter = {
   upsertEvent: (record: EventRecord) => void;
   appendEvidence: (records: EvidenceRecord[]) => void;
   saveReport: (record: ReportRecord) => void;
   getLatestReport: (slug: string) => ReportStatusRecord | null;
+  updateReportPublish: (update: ReportPublishUpdate) => void;
   runInTransaction: (task: () => void) => void;
   close: () => void;
 };
@@ -33,6 +41,7 @@ export function createSqliteStorageAdapter(
     appendEvidence: (records) => appendEvidence(db, records),
     saveReport: (record) => saveReport(db, record),
     getLatestReport: (slug) => getLatestReport(db, slug),
+    updateReportPublish: (update) => updateReportPublish(db, update),
     runInTransaction: (task) => runInTransaction(task),
     close: () => db.close()
   };
@@ -50,4 +59,10 @@ export function getDefaultSqliteStorageAdapter(): StorageAdapter {
   return defaultAdapter;
 }
 
-export type { EventRecord, EvidenceRecord, ReportRecord, ReportStatusRecord };
+export type {
+  EventRecord,
+  EvidenceRecord,
+  ReportRecord,
+  ReportStatusRecord,
+  ReportPublishUpdate
+};

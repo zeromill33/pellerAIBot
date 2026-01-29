@@ -1,4 +1,4 @@
-import type { EvidenceConfig, TavilyConfig } from "./config.schema.js";
+import type { EvidenceConfig, TavilyConfig, PublishConfig } from "./config.schema.js";
 
 export const DEFAULT_TAVILY_CONFIG: TavilyConfig = {
   default: {
@@ -70,4 +70,10 @@ export const DEFAULT_EVIDENCE_CONFIG: EvidenceConfig = {
       "just now"
     ]
   }
+};
+
+export const DEFAULT_PUBLISH_CONFIG: PublishConfig = {
+  strategy: "approve",
+  parse_mode: "Markdown",
+  disable_web_page_preview: true
 };
