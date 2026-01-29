@@ -23,6 +23,7 @@ import { searchTavily } from "./steps/search.tavily.step.js";
 import { buildEvidenceCandidates } from "./steps/evidence.build.step.js";
 import { generateReport } from "./steps/report.generate.step.js";
 import { validateReportJson } from "./steps/report.validate.step.js";
+import { renderTelegramDraft } from "./steps/telegram.render.step.js";
 import { persistEventEvidenceReport } from "./steps/persist.step.js";
 import type { GammaProvider } from "../providers/polymarket/gamma.js";
 import type { ClobProvider } from "../providers/polymarket/clob.js";
@@ -41,6 +42,7 @@ type PublishPipelineContext = PublishPipelineInput & {
   query_plan?: TavilyQueryPlan;
   tavily_results?: TavilyLaneResult[];
   report_json?: ReportV1Json;
+  tg_post_text?: string;
 };
 
 type PipelineStep = {
@@ -481,6 +483,27 @@ function buildPublishPipelineSteps(
       }
     },
     {
+      id: "telegram.render",
+      input_keys: ["ReportV1Json"],
+      output_keys: ["tg_post_text"],
+      run: async (ctx) => {
+        if (!ctx.report_json) {
+          throw createAppError({
+            code: ERROR_CODES.STEP_TELEGRAM_RENDER_MISSING_INPUT,
+            message: "Missing report_json for telegram.render",
+            category: "RENDER",
+            retryable: false,
+            details: { event_slug: ctx.event_slug }
+          });
+        }
+        const { tg_post_text } = await renderTelegramDraft({
+          event_slug: ctx.event_slug,
+          report_json: ctx.report_json
+        });
+        return { ...ctx, tg_post_text };
+      }
+    },
+    {
       id: "persist",
       input_keys: ["MarketContext", "EvidenceCandidate", "ReportV1Json"],
       output_keys: [],
@@ -502,6 +525,7 @@ function buildPublishPipelineSteps(
             market_context: ctx.market_context,
             evidence_candidates: ctx.evidence_candidates,
             report_json: ctx.report_json,
+            tg_post_text: ctx.tg_post_text,
             liquidity_proxy: ctx.liquidity_proxy,
             market_signals: ctx.market_signals
           },
@@ -585,6 +609,7 @@ async function runPublishPipelineSteps(
               market_context: ctx.market_context,
               evidence_candidates: ctx.evidence_candidates,
               report_json: ctx.report_json,
+              tg_post_text: ctx.tg_post_text,
               liquidity_proxy: ctx.liquidity_proxy,
               market_signals: ctx.market_signals
             },

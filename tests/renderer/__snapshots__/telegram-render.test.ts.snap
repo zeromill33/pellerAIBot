@@ -1,0 +1,64 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`renderTelegramReport > renders markdown template with stable structure 1`] = `
+"【测试事件标题】
+市场 Yes/No：55% / 45%
+AI Yes(Beta)：58%（Δ 3%）
+剩余时间：2d 3h
+市场链接：https://polymarket.com/event/test-market
+
+【0 结算条件（原文）】
+结算规则原文
+
+【1 市场在赌什么】
+- 核心判断：市场是否认可测试事件成立
+- 关键前提：核心数据将公开
+
+【2 主要分歧点】
+支持（Pro）
+- 支持观点 1（主流媒体）https://news.example.com/1
+- 支持观点 2（官方公告）https://news.example.com/2
+
+反对（Con）
+- 反对观点 1（社交讨论）https://social.example.com/1
+- 反对观点 2（主流媒体）https://news.example.com/3
+
+【3 已定价 vs 新增】
+已定价：
+- 已定价事项 1（市场行为）
+- 已定价事项 2（主流媒体）
+
+新增/未充分反映：
+- 新增事项 1（官方公告）
+- 新增事项 2（社交讨论）
+
+【4 情绪 vs 赔率（抽样）】
+- 情绪：neutral；关系：none
+- 抽样来源：
+  - 示例讨论 https://social.example.com/2
+
+【5 关键变量】
+- 变量：变量 A
+  - 影响：影响方向 A
+  - 观察信号：观察信号 A
+
+【6 失败路径（最重要）】
+- 失败路径 1
+  - 信号：信号 1
+- 失败路径 2
+  - 信号：信号 2
+
+【7 风险类型】
+- info / time
+
+【8 局限性】
+- 可能无法识别：限制 1；限制 2
+- 不包含：下注方向建议 / 资金管理建议
+
+【9 差值驱动（≤3 条）】
+- 驱动因素 1
+- 驱动因素 2
+
+免责声明：AI 概率为基于当前证据集的估计，可能滞后或偏差；不构成任何投资/下注建议。
+"
+`;
