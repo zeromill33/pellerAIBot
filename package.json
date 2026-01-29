@@ -8,7 +8,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "RUN_E2E=1 vitest run tests/e2e",
-    "e2e:run": "bash scripts/run-e2e.sh"
+    "e2e:run": "bash scripts/run-e2e.sh",
+    "bmad:refresh": "bmad-method install -f -i codex",
+    "bmad:list": "bmad-method list:agents",
+    "bmad:validate": "bmad-method validate"
   },
   "devDependencies": {
     "@types/node": "^20.11.30",
