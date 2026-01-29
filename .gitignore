@@ -1,6 +1,4 @@
 # BMAD (local only)
-.bmad-core/
-.bmad-*/
 .DS_Store
 
 # Node/TypeScript
@@ -17,3 +15,6 @@ tests/e2e/tmp/
 .env
 .env.*
 !.env.example
+
+.claude/
+.gemini/

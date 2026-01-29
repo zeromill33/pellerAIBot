@@ -1546,7 +1546,7 @@ Then proceed with the manual method below ONLY if markdownExploder is false.]]
 
    ```bash
    npm install -g @kayvan/markdown-tree-parser
-```
+   ```
 
 2. **Use the explode command**:
 
@@ -5349,3 +5349,4 @@ Choose a number (0-8) or 9 to proceed:
 ```
 
 <!-- END: BMAD-AGENTS -->
+
