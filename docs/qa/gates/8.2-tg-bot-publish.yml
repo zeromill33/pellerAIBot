@@ -1,0 +1,40 @@
+schema: 1
+story: '8.2'
+story_title: 'TG Bot 发布并默认关闭预览（落地后/审核通过后）'
+gate: PASS
+status_reason: '发布流程、重试与队列机制到位，测试覆盖关键路径。'
+reviewer: 'Quinn (Test Architect)'
+updated: '2026-01-29T17:38:00Z'
+
+top_issues: []
+waiver: { active: false }
+
+quality_score: 100
+expires: '2026-02-12T17:38:00Z'
+
+evidence:
+  tests_reviewed: 3
+  risks_identified: 0
+  trace:
+    ac_covered: [1, 2, 3, 4, 5]
+    ac_gaps: []
+
+nfr_validation:
+  security:
+    status: PASS
+    notes: '敏感配置通过 env 注入；未新增明文配置。'
+  performance:
+    status: PASS
+    notes: '单进程队列+最小间隔限制发布速率。'
+  reliability:
+    status: PASS
+    notes: '429 retry_after 重试已覆盖测试。'
+  maintainability:
+    status: PASS
+    notes: '发布逻辑集中在 provider，易于扩展。'
+
+recommendations:
+  immediate: []
+  future:
+    - action: '可选：将最小间隔与重试参数加入配置层'
+      refs: ['src/providers/telegram/index.ts']

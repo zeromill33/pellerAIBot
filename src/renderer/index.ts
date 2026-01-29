@@ -1,7 +1,9 @@
+import { readFileSync } from "node:fs";
 import type { ReportV1Json } from "../providers/llm/types.js";
 
 const MAX_RULES_LENGTH = 1000;
 const TRUNCATION_NOTICE = "（内容过长，已截断；以市场页原文为准）";
+const SECTION_SEPARATOR = "\n\n";
 
 let cachedTemplate: string | null = null;
 
@@ -9,7 +11,8 @@ function loadTemplate(): string {
   if (cachedTemplate) {
     return cachedTemplate;
   }
-  cachedTemplate = TEMPLATE_INLINE;
+  const templateUrl = new URL("./templates/telegram.md.txt", import.meta.url);
+  cachedTemplate = readFileSync(templateUrl, "utf8");
   return cachedTemplate;
 }
 
@@ -22,6 +25,11 @@ function truncateResolutionRules(value: string): string {
 }
 
 type TemplateData = Record<string, unknown>;
+
+export type RenderTelegramOptions = {
+  parseMode?: "Markdown" | "MarkdownV2" | "HTML";
+  maxLength?: number;
+};
 
 function getPathValue(data: TemplateData, path: string): unknown {
   const tokens: Array<string | number> = [];
@@ -64,7 +72,15 @@ function formatNumber(value: number): string {
   return value.toFixed(1);
 }
 
-function formatValue(value: unknown): string {
+function escapeMarkdownV2(text: string): string {
+  return text.replace(/[_*[\]()~`>#+\-=|{}.!]/g, "\\$&");
+}
+
+function isLikelyUrl(value: string): boolean {
+  return /^https?:\/\/\S+$/i.test(value);
+}
+
+function formatValue(value: unknown, options?: RenderTelegramOptions): string {
   if (value === null || value === undefined) {
     return "N/A";
   }
@@ -74,7 +90,11 @@ function formatValue(value: unknown): string {
   if (Array.isArray(value)) {
     return value.map((item) => String(item)).join(" / ");
   }
-  return String(value);
+  const result = String(value);
+  if (options?.parseMode === "MarkdownV2" && !isLikelyUrl(result)) {
+    return escapeMarkdownV2(result);
+  }
+  return result;
 }
 
 function cloneReport(report: ReportV1Json): TemplateData {
@@ -101,76 +121,122 @@ function buildTemplateData(report: ReportV1Json): TemplateData {
   return data;
 }
 
-function renderTemplate(template: string, data: TemplateData): string {
+function renderTemplate(
+  template: string,
+  data: TemplateData,
+  options?: RenderTelegramOptions
+): string {
   return template.replace(/\{([^}]+)\}/g, (_match, path) => {
     const value = getPathValue(data, path.trim());
-    return formatValue(value);
+    return formatValue(value, options);
   });
 }
 
-export function renderTelegramReport(report: ReportV1Json): string {
-  const template = loadTemplate();
-  const data = buildTemplateData(report);
-  return renderTemplate(template, data);
+function splitTemplateSections(template: string): string[] {
+  const lines = template.split(/\r?\n/);
+  const sections: string[] = [];
+  let current: string[] = [];
+
+  for (const line of lines) {
+    if (line.startsWith("【") && current.length > 0) {
+      sections.push(current.join("\n").trimEnd());
+      current = [];
+    }
+    current.push(line);
+  }
+
+  if (current.length > 0) {
+    sections.push(current.join("\n").trimEnd());
+  }
+
+  return sections.filter((section) => section.trim().length > 0);
 }
 
-const TEMPLATE_INLINE = `【{context.title}】
-市场 Yes/No：{context.market_odds.yes}% / {context.market_odds.no}%
-AI Yes(Beta)：{ai_vs_market.ai_yes_beta}%（Δ {ai_vs_market.delta}%）
-剩余时间：{context.time_remaining}
-市场链接：{context.url}
+function splitByMaxLength(sections: string[], maxLength: number): string[] {
+  const parts: string[] = [];
+  let current = "";
 
-【0 结算条件（原文）】
-{context.resolution_rules_raw}
+  const flushCurrent = () => {
+    if (current.trim().length > 0) {
+      parts.push(current.trimEnd());
+      current = "";
+    }
+  };
 
-【1 市场在赌什么】
-- 核心判断：{market_framing.core_bet}
-- 关键前提：{market_framing.key_assumption}
+  const appendSection = (section: string) => {
+    if (!current) {
+      current = section;
+      return;
+    }
+    const candidate = `${current}${SECTION_SEPARATOR}${section}`;
+    if (candidate.length <= maxLength) {
+      current = candidate;
+      return;
+    }
+    flushCurrent();
+    current = section;
+  };
 
-【2 主要分歧点】
-支持（Pro）
-- {disagreement_map.pro[0].claim}（{disagreement_map.pro[0].source_type}）{disagreement_map.pro[0].url}
-- {disagreement_map.pro[1].claim}（{disagreement_map.pro[1].source_type}）{disagreement_map.pro[1].url}
+  const splitLongSection = (section: string) => {
+    const lines = section.split(/\r?\n/);
+    let buffer = "";
+    for (const line of lines) {
+      const candidate = buffer ? `${buffer}\n${line}` : line;
+      if (candidate.length <= maxLength) {
+        buffer = candidate;
+        continue;
+      }
+      if (buffer) {
+        parts.push(buffer.trimEnd());
+        buffer = "";
+      }
+      if (line.length <= maxLength) {
+        buffer = line;
+        continue;
+      }
+      for (let i = 0; i < line.length; i += maxLength) {
+        parts.push(line.slice(i, i + maxLength));
+      }
+    }
+    if (buffer.trim().length > 0) {
+      parts.push(buffer.trimEnd());
+    }
+  };
 
-反对（Con）
-- {disagreement_map.con[0].claim}（{disagreement_map.con[0].source_type}）{disagreement_map.con[0].url}
-- {disagreement_map.con[1].claim}（{disagreement_map.con[1].source_type}）{disagreement_map.con[1].url}
+  for (const section of sections) {
+    if (section.length > maxLength) {
+      flushCurrent();
+      splitLongSection(section);
+      continue;
+    }
+    appendSection(section);
+  }
 
-【3 已定价 vs 新增】
-已定价：
-- {priced_vs_new.priced_in[0].item}（{priced_vs_new.priced_in[0].source_type}）
-- {priced_vs_new.priced_in[1].item}（{priced_vs_new.priced_in[1].source_type}）
+  flushCurrent();
+  return parts;
+}
 
-新增/未充分反映：
-- {priced_vs_new.new_info[0].item}（{priced_vs_new.new_info[0].source_type}）
-- {priced_vs_new.new_info[1].item}（{priced_vs_new.new_info[1].source_type}）
+export function renderTelegramReportParts(
+  report: ReportV1Json,
+  options: RenderTelegramOptions = {}
+): string[] {
+  const template = loadTemplate();
+  const data = buildTemplateData(report);
+  const sections = splitTemplateSections(template).map((section) =>
+    renderTemplate(section, data, options)
+  );
 
-【4 情绪 vs 赔率（抽样）】
-- 情绪：{sentiment.bias}；关系：{sentiment.relation}
-- 抽样来源：
-  - {sentiment.samples[0].summary} {sentiment.samples[0].url}
+  if (options.maxLength && options.maxLength > 0) {
+    return splitByMaxLength(sections, options.maxLength);
+  }
 
-【5 关键变量】
-- 变量：{key_variables[0].name}
-  - 影响：{key_variables[0].impact}
-  - 观察信号：{key_variables[0].observable_signals}
+  return sections;
+}
 
-【6 失败路径（最重要）】
-- {failure_modes[0].mode}
-  - 信号：{failure_modes[0].observable_signals}
-- {failure_modes[1].mode}
-  - 信号：{failure_modes[1].observable_signals}
-
-【7 风险类型】
-- {risk_attribution}
-
-【8 局限性】
-- 可能无法识别：{limitations.cannot_detect[0]}；{limitations.cannot_detect[1]}
-- 不包含：下注方向建议 / 资金管理建议
-
-【9 差值驱动（≤3 条）】
-- {ai_vs_market.drivers[0]}
-- {ai_vs_market.drivers[1]}
-
-免责声明：AI 概率为基于当前证据集的估计，可能滞后或偏差；不构成任何投资/下注建议。
-`;
+export function renderTelegramReport(
+  report: ReportV1Json,
+  options: RenderTelegramOptions = {}
+): string {
+  const parts = renderTelegramReportParts(report, options);
+  return parts.join(SECTION_SEPARATOR);
+}

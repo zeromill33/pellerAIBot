@@ -29,6 +29,13 @@ export type ReportPublishUpdate = {
   tg_message_id: string;
 };
 
+export type ReportStatusUpdate = {
+  report_id: string;
+  status: string;
+  validator_code?: string | null;
+  validator_message?: string | null;
+};
+
 export function saveReport(db: SqliteDatabase, record: ReportRecord): void {
   const stmt = db.prepare(
     `INSERT INTO report (
@@ -103,4 +110,22 @@ export function updateReportPublish(
          tg_message_id = @tg_message_id
      WHERE report_id = @report_id`
   ).run(update);
+}
+
+export function updateReportStatus(
+  db: SqliteDatabase,
+  update: ReportStatusUpdate
+): void {
+  db.prepare(
+    `UPDATE report
+     SET status = @status,
+         validator_code = @validator_code,
+         validator_message = @validator_message
+     WHERE report_id = @report_id`
+  ).run({
+    report_id: update.report_id,
+    status: update.status,
+    validator_code: update.validator_code ?? null,
+    validator_message: update.validator_message ?? null
+  });
 }

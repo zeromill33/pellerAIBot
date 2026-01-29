@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { renderTelegramReport } from "../../src/renderer/index.js";
+import {
+  renderTelegramReport,
+  renderTelegramReportParts
+} from "../../src/renderer/index.js";
 import type { ReportV1Json } from "../../src/providers/llm/types.js";
 
 function buildReport(overrides?: Partial<ReportV1Json>): ReportV1Json {
@@ -112,5 +115,27 @@ describe("renderTelegramReport", () => {
     expect(text).toContain("以市场页原文为准");
     const rulesSection = text.split("【1 市场在赌什么】")[0] ?? "";
     expect(rulesSection.length).toBeLessThan(longRules.length + 200);
+  });
+
+  it("escapes MarkdownV2 special characters without breaking URLs", () => {
+    const report = buildReport({
+      context: {
+        ...(buildReport().context as Record<string, unknown>),
+        title: "测试标题 [含特殊*字符]"
+      }
+    });
+    const text = renderTelegramReport(report, { parseMode: "MarkdownV2" });
+    expect(text).toContain("测试标题 \\[含特殊\\*字符\\]");
+    expect(text).toContain("https://polymarket.com/event/test-market");
+  });
+
+  it("splits long output by section boundaries when maxLength is set", () => {
+    const report = buildReport();
+    const parts = renderTelegramReportParts(report, { maxLength: 200 });
+    expect(parts.length).toBeGreaterThan(1);
+    for (const part of parts) {
+      expect(part.length).toBeLessThanOrEqual(200);
+    }
+    expect(parts[0]).toContain("【");
   });
 });

@@ -561,6 +561,7 @@ function buildPublishPipelineSteps(
         }
         await publishTelegramMessage(
           {
+            request_id: ctx.request_id,
             event_slug: ctx.event_slug,
             run_id: ctx.run_id,
             tg_post_text: ctx.tg_post_text

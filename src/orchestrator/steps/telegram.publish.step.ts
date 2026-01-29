@@ -3,6 +3,7 @@ import { createTelegramPublisher, type TelegramPublisher } from "../../providers
 import { getDefaultSqliteStorageAdapter, type StorageAdapter } from "../../storage/index.js";
 
 export type TelegramPublishInput = {
+  request_id: string;
   event_slug: string;
   run_id: string;
   tg_post_text?: string | null;
@@ -42,17 +43,53 @@ export async function publishTelegramMessage(
       status: "published",
       tg_message_id: result.message_id
     });
+    console.info({
+      message: "telegram.publish.success",
+      step_id: "telegram.publish",
+      request_id: input.request_id,
+      run_id: input.run_id,
+      event_slug: input.event_slug,
+      message_id: result.message_id
+    });
     return { message_id: result.message_id };
   } catch (error) {
-    if (error instanceof AppError) {
-      throw error;
+    const appError =
+      error instanceof AppError
+        ? error
+        : createAppError({
+            code: ERROR_CODES.PROVIDER_TG_REQUEST_FAILED,
+            message:
+              error instanceof Error ? error.message : "Telegram publish failed",
+            category: "PUBLISH",
+            retryable: true,
+            details: { event_slug: input.event_slug }
+          });
+    try {
+      storage.updateReportStatus({
+        report_id: `report_${input.run_id}`,
+        status: "blocked",
+        validator_code: appError.code,
+        validator_message: appError.message
+      });
+    } catch (persistError) {
+      console.error({
+        message: "telegram.publish.status_update_failed",
+        step_id: "telegram.publish",
+        request_id: input.request_id,
+        run_id: input.run_id,
+        event_slug: input.event_slug,
+        error: persistError instanceof Error ? persistError.message : String(persistError)
+      });
     }
-    throw createAppError({
-      code: ERROR_CODES.PROVIDER_TG_REQUEST_FAILED,
-      message: error instanceof Error ? error.message : "Telegram publish failed",
-      category: "PUBLISH",
-      retryable: true,
-      details: { event_slug: input.event_slug }
+    console.info({
+      message: "telegram.publish.failed",
+      step_id: "telegram.publish",
+      request_id: input.request_id,
+      run_id: input.run_id,
+      event_slug: input.event_slug,
+      error_code: appError.code,
+      error_category: appError.category
     });
+    throw appError;
   }
 }

@@ -6,9 +6,11 @@ import {
   saveReport,
   getLatestReport,
   updateReportPublish,
+  updateReportStatus,
   type ReportRecord,
   type ReportStatusRecord,
-  type ReportPublishUpdate
+  type ReportPublishUpdate,
+  type ReportStatusUpdate
 } from "./report.repo.js";
 
 export type StorageAdapter = {
@@ -17,6 +19,7 @@ export type StorageAdapter = {
   saveReport: (record: ReportRecord) => void;
   getLatestReport: (slug: string) => ReportStatusRecord | null;
   updateReportPublish: (update: ReportPublishUpdate) => void;
+  updateReportStatus: (update: ReportStatusUpdate) => void;
   runInTransaction: (task: () => void) => void;
   close: () => void;
 };
@@ -42,6 +45,7 @@ export function createSqliteStorageAdapter(
     saveReport: (record) => saveReport(db, record),
     getLatestReport: (slug) => getLatestReport(db, slug),
     updateReportPublish: (update) => updateReportPublish(db, update),
+    updateReportStatus: (update) => updateReportStatus(db, update),
     runInTransaction: (task) => runInTransaction(task),
     close: () => db.close()
   };
@@ -64,5 +68,6 @@ export type {
   EvidenceRecord,
   ReportRecord,
   ReportStatusRecord,
-  ReportPublishUpdate
+  ReportPublishUpdate,
+  ReportStatusUpdate
 };

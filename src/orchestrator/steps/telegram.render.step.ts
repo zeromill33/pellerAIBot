@@ -1,6 +1,7 @@
 import { createAppError, ERROR_CODES } from "../errors.js";
 import type { ReportV1Json } from "../../providers/llm/types.js";
 import { renderTelegramReport } from "../../renderer/index.js";
+import { loadPublishConfig } from "../../config/load.js";
 
 export type TelegramRenderInput = {
   event_slug: string;
@@ -25,6 +26,9 @@ export async function renderTelegramDraft(
     });
   }
 
-  const tg_post_text = renderTelegramReport(input.report_json);
+  const publishConfig = loadPublishConfig();
+  const tg_post_text = renderTelegramReport(input.report_json, {
+    parseMode: publishConfig.parse_mode
+  });
   return { report_json: input.report_json, tg_post_text };
 }

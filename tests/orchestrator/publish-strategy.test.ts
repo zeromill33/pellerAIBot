@@ -8,6 +8,7 @@ import type { LLMProvider, ReportV1Json } from "../../src/providers/llm/types.js
 import { openSqliteDatabase } from "../../src/storage/sqlite/db.js";
 import { createSqliteStorageAdapter } from "../../src/storage/sqlite/index.js";
 import type { TelegramPublisher } from "../../src/providers/telegram/index.js";
+import { createAppError } from "../../src/orchestrator/errors.js";
 
 function buildValidReport(): ReportV1Json {
   return {
@@ -233,5 +234,51 @@ describe("publish strategy", () => {
       .get("report_run-2") as { status: string; tg_message_id: string | null };
     expect(report.status).toBe("ready");
     expect(report.tg_message_id).toBeNull();
+  });
+
+  it("publish failure updates report status with error code", async () => {
+    const telegramPublisher: TelegramPublisher = {
+      async publishToChannel() {
+        throw createAppError({
+          code: "PROVIDER_TG_REQUEST_FAILED",
+          message: "rate limited",
+          category: "PUBLISH",
+          retryable: true
+        });
+      }
+    };
+
+    await expect(
+      runPublishPipelineSteps(
+        { request_id: "req-3", run_id: "run-3", event_slug: "test-event" },
+        {
+          stepOptions: {
+            gammaProvider,
+            clobProvider,
+            pricingProvider,
+            tavilyProvider,
+            llmProvider,
+            marketSignalsTopMarkets: 0,
+            storage,
+            telegramPublisher,
+            publishConfig: { strategy: "auto" }
+          },
+          stopStepId: "telegram.publish"
+        }
+      )
+    ).rejects.toMatchObject({ code: "PROVIDER_TG_REQUEST_FAILED" });
+
+    const report = db
+      .prepare(
+        "SELECT status, validator_code, validator_message FROM report WHERE report_id = ?"
+      )
+      .get("report_run-3") as {
+      status: string;
+      validator_code: string | null;
+      validator_message: string | null;
+    };
+    expect(report.status).toBe("blocked");
+    expect(report.validator_code).toBe("PROVIDER_TG_REQUEST_FAILED");
+    expect(report.validator_message).toBe("rate limited");
   });
 });

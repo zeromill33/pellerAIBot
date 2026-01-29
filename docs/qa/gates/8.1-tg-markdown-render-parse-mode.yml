@@ -1,0 +1,40 @@
+schema: 1
+story: '8.1'
+story_title: '按模板渲染 TG Markdown（parse_mode 配置化）'
+gate: PASS
+status_reason: '渲染实现与测试覆盖完整，满足 AC，未发现高风险问题。'
+reviewer: 'Quinn (Test Architect)'
+updated: '2026-01-29T17:35:00Z'
+
+top_issues: []
+waiver: { active: false }
+
+quality_score: 100
+expires: '2026-02-12T17:35:00Z'
+
+evidence:
+  tests_reviewed: 4
+  risks_identified: 0
+  trace:
+    ac_covered: [1, 2, 3, 4]
+    ac_gaps: []
+
+nfr_validation:
+  security:
+    status: PASS
+    notes: '未引入新外部输入路径；渲染基于结构化 JSON。'
+  performance:
+    status: PASS
+    notes: '模板缓存 + 线性字符串处理，成本可控。'
+  reliability:
+    status: PASS
+    notes: '分段逻辑与 MarkdownV2 转义有单测覆盖。'
+  maintainability:
+    status: PASS
+    notes: '模板外置、函数拆分清晰，便于后续扩展。'
+
+recommendations:
+  immediate: []
+  future:
+    - action: '可选：将渲染分段 maxLength 通过发布配置下发'
+      refs: ['src/renderer/index.ts']
