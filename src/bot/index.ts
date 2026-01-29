@@ -1,4 +1,5 @@
 import { handlePublishCommand } from "./commands/publish.js";
+import { handleStatusCommand } from "./commands/status.js";
 import { guardAdminUser } from "./guard.js";
 import {
   AppError,
@@ -10,6 +11,7 @@ import type { ErrorReceipt } from "../orchestrator/types.js";
 import type { BotConfig } from "../config/config.schema.js";
 import { validateConfig } from "../config/config.schema.js";
 import type { PublishBatchReceipt } from "./commands/publish.js";
+import type { StatusReceipt } from "./commands/status.js";
 
 export type BotCommandInput = {
   user_id: number;
@@ -18,7 +20,7 @@ export type BotCommandInput = {
 
 export type BotCommandSuccess = {
   status: "ok";
-  receipt: PublishBatchReceipt;
+  receipt: PublishBatchReceipt | StatusReceipt;
 };
 
 export type BotCommandFailure = {
@@ -44,6 +46,10 @@ export async function handleBotCommand(
     const trimmed = input.text.trim();
     if (trimmed.startsWith("/publish")) {
       const result = await handlePublishCommand(input.text);
+      return { status: "ok", receipt: result.receipt };
+    }
+    if (trimmed.startsWith("/status")) {
+      const result = await handleStatusCommand(input.text);
       return { status: "ok", receipt: result.receipt };
     }
 

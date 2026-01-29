@@ -13,6 +13,7 @@ const REQUIRED_TOP_LEVEL_KEYS = [
   "limitations",
   "ai_vs_market"
 ] as const;
+const REQUIRED_TOP_LEVEL_KEY_SET = new Set<string>(REQUIRED_TOP_LEVEL_KEYS);
 
 const ALLOWED_SOURCE_TYPES = new Set([
   "官方公告",
@@ -128,7 +129,7 @@ function parseJsonStrict(text: string): unknown {
 function validateTopLevel(report: ReportObject) {
   const keys = Object.keys(report);
   const missing = REQUIRED_TOP_LEVEL_KEYS.filter((key) => !(key in report));
-  const extra = keys.filter((key) => !REQUIRED_TOP_LEVEL_KEYS.includes(key));
+  const extra = keys.filter((key) => !REQUIRED_TOP_LEVEL_KEY_SET.has(key));
   if (missing.length > 0 || extra.length > 0) {
     invalid("Report JSON top-level keys mismatch", { missing, extra });
   }

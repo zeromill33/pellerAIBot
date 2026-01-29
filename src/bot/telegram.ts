@@ -4,6 +4,7 @@ import { validateTelegramConfig } from "../config/config.schema.js";
 import type { TelegramBotConfig } from "../config/config.schema.js";
 import type { BotCommandResult } from "./index.js";
 import type { PublishBatchReceipt } from "./commands/publish.js";
+import type { StatusReceipt } from "./commands/status.js";
 import type { ErrorReceipt } from "../orchestrator/types.js";
 
 function formatPublishReceipt(receipt: PublishBatchReceipt): string {
@@ -38,6 +39,23 @@ function formatPublishReceipt(receipt: PublishBatchReceipt): string {
   return lines.join("\n");
 }
 
+function formatStatusReceipt(receipt: StatusReceipt): string {
+  const lines = [
+    `slug: ${receipt.slug}`,
+    `status: ${receipt.status}`,
+    `generated_at: ${receipt.generated_at}`
+  ];
+
+  if (receipt.validator_code) {
+    lines.push(`validator_code: ${receipt.validator_code}`);
+  }
+  if (receipt.validator_message) {
+    lines.push(`validator_message: ${receipt.validator_message}`);
+  }
+
+  return lines.join("\n");
+}
+
 function formatErrorReceipt(error: ErrorReceipt): string {
   const lines = [
     `error_code: ${error.code}`,
@@ -64,6 +82,9 @@ function formatErrorReceipt(error: ErrorReceipt): string {
 
 function formatBotResponse(result: BotCommandResult): string {
   if (result.status === "ok") {
+    if ("kind" in result.receipt && result.receipt.kind === "status") {
+      return formatStatusReceipt(result.receipt);
+    }
     return formatPublishReceipt(result.receipt);
   }
 
@@ -83,6 +104,18 @@ export function createTelegramBot(rawConfig: Partial<TelegramBotConfig>): Bot {
     }
 
     const text = ctx.message?.text ?? "/publish";
+    const result = await handler({ user_id: userId, text });
+    await ctx.reply(formatBotResponse(result));
+  });
+
+  bot.command("status", async (ctx) => {
+    const userId = ctx.from?.id;
+    if (!userId) {
+      await ctx.reply("Unable to identify user");
+      return;
+    }
+
+    const text = ctx.message?.text ?? "/status";
     const result = await handler({ user_id: userId, text });
     await ctx.reply(formatBotResponse(result));
   });

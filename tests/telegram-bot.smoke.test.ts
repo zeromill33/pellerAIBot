@@ -32,11 +32,12 @@ describe("telegram bot smoke", () => {
     createBotHandlerMock.mockReset();
   });
 
-  it("starts bot and registers publish command", async () => {
+  it("starts bot and registers publish/status commands", async () => {
     const { startTelegramBot } = await import("../src/bot/telegram.js");
     const handler = vi.fn().mockResolvedValue({
       status: "ok",
       receipt: {
+        kind: "publish",
         request_id: "req_test",
         summary: {
           total: 1,
@@ -59,6 +60,7 @@ describe("telegram bot smoke", () => {
     expect(bot.token).toBe("token");
     expect(bot.start).toHaveBeenCalledTimes(1);
     expect(commandRegistry.has("publish")).toBe(true);
+    expect(commandRegistry.has("status")).toBe(true);
   });
 
   it("routes publish command to handler and replies", async () => {
@@ -66,6 +68,7 @@ describe("telegram bot smoke", () => {
     const handler = vi.fn().mockResolvedValue({
       status: "ok",
       receipt: {
+        kind: "publish",
         request_id: "req_test",
         summary: {
           total: 1,
@@ -109,6 +112,7 @@ describe("telegram bot smoke", () => {
     const handler = vi.fn().mockResolvedValue({
       status: "ok",
       receipt: {
+        kind: "publish",
         request_id: "req_test",
         summary: {
           total: 1,

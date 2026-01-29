@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import Ajv from "ajv/dist/2020";
+import { Ajv2020 } from "ajv/dist/2020.js";
 import type { ErrorObject } from "ajv";
 
 const schemaPath = new URL("./schema/report_v1.schema.json", import.meta.url);
@@ -8,7 +8,7 @@ const schema = JSON.parse(readFileSync(schemaPath, "utf-8")) as Record<
   unknown
 >;
 
-const ajv = new Ajv({ allErrors: true, strict: true });
+const ajv = new Ajv2020({ allErrors: true, strict: true });
 const validateReportV1 = ajv.compile(schema);
 
 export type SchemaValidationResult =

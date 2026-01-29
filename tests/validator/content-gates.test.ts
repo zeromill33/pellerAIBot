@@ -127,7 +127,7 @@ describe("validator content gates", () => {
 
   it("blocks failure_modes with short observable_signals", () => {
     const report = buildValidReport();
-    report.failure_modes[0].observable_signals = "too short";
+    report.failure_modes[0]!.observable_signals = "too short";
     const result = validateContentGates(report, { minFailureSignalLength: 20 });
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -137,9 +137,9 @@ describe("validator content gates", () => {
 
   it("blocks insufficient distinct urls", () => {
     const report = buildValidReport();
-    report.disagreement_map.con[0].url = report.disagreement_map.pro[0].url;
-    report.disagreement_map.con[1].url = report.disagreement_map.pro[0].url;
-    report.disagreement_map.pro[1].url = report.disagreement_map.pro[0].url;
+    report.disagreement_map.con[0]!.url = report.disagreement_map.pro[0]!.url;
+    report.disagreement_map.con[1]!.url = report.disagreement_map.pro[0]!.url;
+    report.disagreement_map.pro[1]!.url = report.disagreement_map.pro[0]!.url;
     const result = validateReport(report);
     expect(result.ok).toBe(false);
     if (!result.ok) {

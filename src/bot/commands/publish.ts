@@ -21,6 +21,7 @@ export type PublishReceiptInvalidUrl = {
 };
 
 export type PublishBatchReceipt = {
+  kind: "publish";
   request_id: string;
   summary: PublishBatchResult["summary"];
   successes: PublishReceiptSuccess[];
@@ -36,6 +37,7 @@ export function buildPublishReceipt(
   result: PublishBatchResult
 ): PublishBatchReceipt {
   return {
+    kind: "publish",
     request_id: result.request_id,
     summary: result.summary,
     successes: result.successes.map((item) => ({

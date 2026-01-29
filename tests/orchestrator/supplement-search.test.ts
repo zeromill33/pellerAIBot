@@ -121,8 +121,8 @@ const clobProvider = {
       spread: 0.01,
       midpoint: 0.5,
       book_top_levels: [
-        { side: "bid", price: 0.5, size: 10 },
-        { side: "ask", price: 0.6, size: 12 }
+        { side: "bid" as const, price: 0.5, size: 10 },
+        { side: "ask" as const, price: 0.6, size: 12 }
       ],
       notable_walls: []
     };

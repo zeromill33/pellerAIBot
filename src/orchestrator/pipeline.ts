@@ -11,7 +11,8 @@ import type {
 } from "./types.js";
 import type {
   EvidenceConfigInput,
-  TavilyConfigInput
+  TavilyConfigInput,
+  TavilySearchDepth
 } from "../config/config.schema.js";
 import { loadTavilyConfig } from "../config/load.js";
 import { fetchMarketContext } from "./steps/market.fetch.step.js";
@@ -91,7 +92,7 @@ type PublishPipelineRuntimeOptions = {
   now?: () => number;
 };
 
-const SUPPLEMENT_ELIGIBLE_CODES = new Set([
+const SUPPLEMENT_ELIGIBLE_CODES = new Set<string>([
   ERROR_CODES.VALIDATOR_DISAGREEMENT_INSUFFICIENT,
   ERROR_CODES.VALIDATOR_FAILURE_MODES_GENERIC,
   ERROR_CODES.VALIDATOR_INSUFFICIENT_URLS
@@ -121,13 +122,13 @@ function buildSupplementTavilyConfig(
     ...(baseConfig?.lanes ?? {}),
     C_counter: {
       ...(baseConfig?.lanes?.C_counter ?? {}),
-      search_depth: "advanced"
+      search_depth: "advanced" as TavilySearchDepth
     },
     ...(enableDLane
       ? {
           D_chatter: {
             ...(baseConfig?.lanes?.D_chatter ?? {}),
-            enabled: "always"
+            enabled: "always" as const
           }
         }
       : {})
