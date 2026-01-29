@@ -23,6 +23,7 @@ import { searchTavily } from "./steps/search.tavily.step.js";
 import { buildEvidenceCandidates } from "./steps/evidence.build.step.js";
 import { generateReport } from "./steps/report.generate.step.js";
 import { validateReportJson } from "./steps/report.validate.step.js";
+import { persistEventEvidenceReport } from "./steps/persist.step.js";
 import type { GammaProvider } from "../providers/polymarket/gamma.js";
 import type { ClobProvider } from "../providers/polymarket/clob.js";
 import type { PricingProvider } from "../providers/polymarket/pricing.js";
@@ -30,6 +31,7 @@ import type { TavilyProvider } from "../providers/tavily/index.js";
 import { createTavilyProvider } from "../providers/tavily/index.js";
 import type { LLMProvider } from "../providers/llm/types.js";
 import type { ReportV1Json } from "../providers/llm/types.js";
+import type { StorageAdapter } from "../storage/index.js";
 
 type PublishPipelineContext = PublishPipelineInput & {
   market_context?: MarketContext;
@@ -72,6 +74,7 @@ type PipelineStepOptions = {
   pricingProvider?: PricingProvider;
   tavilyProvider?: TavilyProvider;
   llmProvider?: LLMProvider;
+  storage?: StorageAdapter;
   tavilyConfig?: TavilyConfigInput;
   evidenceConfig?: EvidenceConfigInput;
   marketSignalsTopMarkets?: number;
@@ -476,6 +479,36 @@ function buildPublishPipelineSteps(
         });
         return { ...ctx, report_json };
       }
+    },
+    {
+      id: "persist",
+      input_keys: ["MarketContext", "EvidenceCandidate", "ReportV1Json"],
+      output_keys: [],
+      run: async (ctx) => {
+        if (!ctx.market_context) {
+          throw createAppError({
+            code: ERROR_CODES.STEP_PERSIST_MISSING_INPUT,
+            message: "Missing market_context for persist step",
+            category: "STORE",
+            retryable: false,
+            details: { event_slug: ctx.event_slug }
+          });
+        }
+        await persistEventEvidenceReport(
+          {
+            request_id: ctx.request_id,
+            run_id: ctx.run_id,
+            event_slug: ctx.event_slug,
+            market_context: ctx.market_context,
+            evidence_candidates: ctx.evidence_candidates,
+            report_json: ctx.report_json,
+            liquidity_proxy: ctx.liquidity_proxy,
+            market_signals: ctx.market_signals
+          },
+          { storage: options.storage, status: "ready" }
+        );
+        return { ...ctx };
+      }
     }
   ];
 }
@@ -540,6 +573,36 @@ async function runPublishPipelineSteps(
         supplementAttempted = true;
         ctx = await runSupplementSearch(ctx, options.stepOptions ?? {}, appError);
         continue;
+      }
+
+      if (step.id === "report.validate") {
+        try {
+          await persistEventEvidenceReport(
+            {
+              request_id: ctx.request_id,
+              run_id: ctx.run_id,
+              event_slug: ctx.event_slug,
+              market_context: ctx.market_context,
+              evidence_candidates: ctx.evidence_candidates,
+              report_json: ctx.report_json,
+              liquidity_proxy: ctx.liquidity_proxy,
+              market_signals: ctx.market_signals
+            },
+            {
+              storage: options.stepOptions?.storage,
+              status: "blocked",
+              validator_code: appError.code,
+              validator_message: appError.message
+            }
+          );
+        } catch (persistError) {
+          console.error({
+            message: "persist_step_failed",
+            event_slug: ctx.event_slug,
+            run_id: ctx.run_id,
+            error: persistError instanceof Error ? persistError.message : String(persistError)
+          });
+        }
       }
       throw appError;
     }

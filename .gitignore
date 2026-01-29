@@ -11,6 +11,9 @@ coverage/
 # E2E temp outputs
 tests/e2e/tmp/
 
+# Local data
+data/
+
 # Env files (keep examples)
 .env
 .env.*
