@@ -31,7 +31,7 @@ const validReport = {
         claim: "Market pricing partially reflects expectations.",
         source_type: "市场行为",
         url: "https://official.example.com/statement",
-        time: "N/A"
+        time: "2026-01-03T00:00:00Z"
       }
     ],
     con: [

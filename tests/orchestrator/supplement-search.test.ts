@@ -35,7 +35,7 @@ function buildValidReport(): ReportV1Json {
           claim: "Market pricing partially reflects expectations.",
           source_type: "市场行为",
           url: "https://official.example.com/statement",
-          time: "N/A"
+          time: "2026-01-03T00:00:00Z"
         }
       ],
       con: [
@@ -169,6 +169,7 @@ describe("pipeline supplement search", () => {
     const context = await runPublishPipelineSteps(
       { request_id: "req-1", run_id: "run-1", event_slug: "test-event" },
       {
+        stopStepId: "report.validate",
         stepOptions: {
           gammaProvider,
           clobProvider,
@@ -226,6 +227,7 @@ describe("pipeline supplement search", () => {
       runPublishPipelineSteps(
         { request_id: "req-2", run_id: "run-2", event_slug: "test-event" },
         {
+          stopStepId: "report.validate",
           stepOptions: {
             gammaProvider,
             clobProvider,

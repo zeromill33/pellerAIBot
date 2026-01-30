@@ -33,7 +33,7 @@ function buildValidReport() {
           claim: "Market pricing partially reflects expectations.",
           source_type: "市场行为",
           url: "https://official.example.com/statement",
-          time: "N/A"
+          time: "2026-01-03T00:00:00Z"
         }
       ],
       con: [
@@ -185,6 +185,43 @@ describe("validator content gates", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.code).toBe(ERROR_CODES.VALIDATOR_AI_DRIVERS_INVALID);
+    }
+  });
+
+  it("blocks ai_vs_market delta mismatch", () => {
+    const report = buildValidReport();
+    report.ai_vs_market.delta = 10;
+    const result = validateContentGates(report);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe(ERROR_CODES.VALIDATOR_METRICS_MISMATCH);
+    }
+  });
+
+  it("allows ai_vs_market delta within tolerance", () => {
+    const report = buildValidReport();
+    report.ai_vs_market.delta = 5.05;
+    const result = validateContentGates(report);
+    expect(result.ok).toBe(true);
+  });
+
+  it("blocks placeholder outside allowed fields", () => {
+    const report = buildValidReport();
+    report.market_framing.core_bet = "N/A";
+    const result = validateContentGates(report);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe(ERROR_CODES.VALIDATOR_PLACEHOLDER_OUTPUT);
+    }
+  });
+
+  it("blocks N/A time without market url", () => {
+    const report = buildValidReport();
+    report.disagreement_map.con[0]!.time = "N/A";
+    const result = validateContentGates(report);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe(ERROR_CODES.VALIDATOR_PLACEHOLDER_OUTPUT);
     }
   });
 });

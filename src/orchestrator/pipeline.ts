@@ -100,7 +100,8 @@ type PublishPipelineRuntimeOptions = {
 const SUPPLEMENT_ELIGIBLE_CODES = new Set<string>([
   ERROR_CODES.VALIDATOR_DISAGREEMENT_INSUFFICIENT,
   ERROR_CODES.VALIDATOR_FAILURE_MODES_GENERIC,
-  ERROR_CODES.VALIDATOR_INSUFFICIENT_URLS
+  ERROR_CODES.VALIDATOR_INSUFFICIENT_URLS,
+  ERROR_CODES.VALIDATOR_PLACEHOLDER_OUTPUT
 ]);
 
 const SUPPLEMENT_ACTIONS = new Set(["ADD_SEARCH", "supplement_search"]);
@@ -636,6 +637,9 @@ async function runPublishPipelineSteps(
       ) {
         supplementAttempted = true;
         ctx = await runSupplementSearch(ctx, options.stepOptions ?? {}, appError);
+        if (stopStepId === "report.validate") {
+          break;
+        }
         continue;
       }
 

@@ -93,6 +93,7 @@ type SentimentSample = {
 type ReportV1 = {
   context: {
     resolution_rules_raw: string;
+    url: string;
   };
   market_framing: {
     core_bet: string;
@@ -125,9 +126,15 @@ type ReportV1 = {
     not_included: string[];
   };
   ai_vs_market: {
+    market_yes: number;
+    ai_yes_beta: number;
+    delta: number;
     drivers: string[];
   };
 };
+
+const PLACEHOLDER_VALUES = new Set(["N/A", "unknown"]);
+const DELTA_TOLERANCE = 0.1;
 
 function normalizeConfig(input?: GateConfigInput): ContentGateConfig {
   return {
@@ -287,6 +294,30 @@ export function validateContentGates(
     };
   }
 
+  if (
+    typeof report.ai_vs_market?.market_yes === "number" &&
+    typeof report.ai_vs_market?.ai_yes_beta === "number" &&
+    typeof report.ai_vs_market?.delta === "number"
+  ) {
+    const expectedDelta = report.ai_vs_market.ai_yes_beta - report.ai_vs_market.market_yes;
+    const difference = Math.abs(report.ai_vs_market.delta - expectedDelta);
+    if (difference > DELTA_TOLERANCE) {
+      return {
+        ok: false,
+        code: ERROR_CODES.VALIDATOR_METRICS_MISMATCH,
+        message: "ai_vs_market.delta must match ai_yes_beta - market_yes",
+        details: {
+          expected_delta: expectedDelta,
+          actual_delta: report.ai_vs_market.delta,
+          market_yes: report.ai_vs_market.market_yes,
+          ai_yes_beta: report.ai_vs_market.ai_yes_beta,
+          tolerance: DELTA_TOLERANCE,
+          difference
+        }
+      };
+    }
+  }
+
   if (report.disagreement_map.pro.length < 2 || report.disagreement_map.con.length < 2) {
     return {
       ok: false,
@@ -389,6 +420,16 @@ export function validateContentGates(
     }
   }
 
+  const placeholderViolation = findPlaceholderViolation(report);
+  if (placeholderViolation) {
+    return {
+      ok: false,
+      code: ERROR_CODES.VALIDATOR_PLACEHOLDER_OUTPUT,
+      message: "Placeholder value detected outside allowed fields",
+      details: placeholderViolation
+    };
+  }
+
   const drivers = report.ai_vs_market.drivers ?? [];
   if (drivers.length < 1 || drivers.length > 3) {
     return {
@@ -412,4 +453,114 @@ export function validateContentGates(
   }
 
   return { ok: true };
+}
+
+function findPlaceholderViolation(report: ReportV1): {
+  path: string;
+  value: string;
+  reason: string;
+  details?: Record<string, unknown>;
+} | null {
+  const sentimentSamples = report.sentiment?.samples ?? [];
+  const sentimentBias = report.sentiment?.bias;
+  const sentimentRelation = report.sentiment?.relation;
+  const allowedSentimentUnknown =
+    sentimentSamples.length === 0 &&
+    sentimentBias === "unknown" &&
+    sentimentRelation === "unknown";
+
+  const visit = (value: unknown, path: string): {
+    path: string;
+    value: string;
+    reason: string;
+    details?: Record<string, unknown>;
+  } | null => {
+    if (typeof value === "string" && PLACEHOLDER_VALUES.has(value)) {
+      if (value === "unknown") {
+        if (
+          (path === "sentiment.bias" || path === "sentiment.relation") &&
+          sentimentSamples.length === 0
+        ) {
+          return null;
+        }
+        return {
+          path,
+          value,
+          reason: "unknown placeholder not allowed here"
+        };
+      }
+      if (value === "N/A") {
+        const match = path.match(/^disagreement_map\.(pro|con)\[(\d+)\]\.time$/u);
+        if (match) {
+          const lane = match[1] as "pro" | "con";
+          const index = Number(match[2]);
+          const item = report.disagreement_map?.[lane]?.[index];
+          const marketUrl = report.context?.url;
+          if (item && marketUrl && item.url === marketUrl) {
+            return null;
+          }
+          return {
+            path,
+            value,
+            reason: "N/A time requires market url",
+            details: {
+              market_url: marketUrl,
+              item_url: item?.url
+            }
+          };
+        }
+        return {
+          path,
+          value,
+          reason: "N/A placeholder not allowed here"
+        };
+      }
+    }
+
+    if (Array.isArray(value)) {
+      for (let i = 0; i < value.length; i += 1) {
+        const entry = visit(value[i], `${path}[${i}]`);
+        if (entry) {
+          return entry;
+        }
+      }
+      return null;
+    }
+
+    if (value && typeof value === "object") {
+      const record = value as Record<string, unknown>;
+      for (const [key, entryValue] of Object.entries(record)) {
+        const entry = visit(entryValue, path ? `${path}.${key}` : key);
+        if (entry) {
+          return entry;
+        }
+      }
+      return null;
+    }
+
+    return null;
+  };
+
+  if (allowedSentimentUnknown) {
+    // Sentiment placeholders are allowed only in the empty-sample case.
+    const sentimentViolation = visit(sentimentSamples, "sentiment.samples");
+    if (sentimentViolation) {
+      return sentimentViolation;
+    }
+    const allowedPaths = new Set(["sentiment.bias", "sentiment.relation"]);
+    const sentimentRecord = report.sentiment as unknown as Record<string, unknown>;
+    for (const [key, value] of Object.entries(sentimentRecord)) {
+      if (allowedPaths.has(`sentiment.${key}`)) {
+        continue;
+      }
+      const entry = visit(value, `sentiment.${key}`);
+      if (entry) {
+        return entry;
+      }
+    }
+    const reportWithoutSentiment = { ...report, sentiment: {} as ReportV1["sentiment"] };
+    return visit(reportWithoutSentiment, "");
+  }
+
+  return visit(report, "");
 }
