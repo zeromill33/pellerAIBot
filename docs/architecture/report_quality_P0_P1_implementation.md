@@ -1,6 +1,6 @@
 # MVP 报告质量优化（P0/P1）实现方案 — 可执行清单
 
-> 目标：针对样例报告暴露的问题（不相关引用、N/A/unknown、Δ 计算错误、引用不可审计、市场行为证据贫弱、规则未结构化），在现有架构（Orchestrator + Providers + Validator + Renderer + Storage）上做 **最小侵入**的 P0/P1 改造。  
+> 目标：针对样例报告暴露的问题（不相关引用、占位符输出、Δ 计算错误、引用不可审计、市场行为证据贫弱、规则未结构化），在现有架构（Orchestrator + Providers + Validator + Renderer + Storage）上做 **最小侵入**的 P0/P1 改造。  
 > 适用版本：TDD v0.2（Week 1 Content Ops / TG 自动推送）。  
 > 生成时间：2026-01-30T04:12:06.232832+00:00
 
@@ -18,27 +18,33 @@
 
 ### 0.2 工程化根因
 - Search 构造泛化：缺少 resolver/判定词/截止时间锚定，导致结果不匹配
-- EvidenceBuilder 缺少 relevance 校验与“可审计片段”要求
-- 派生字段（Δ、剩余时间）由 LLM/渲染混算，缺少机器校验
+- LLM 输入未做相关性过滤，导致“命中但不相关”的证据进入生成
+- 派生字段（尤其 Δ）由 LLM 输出，缺少一致性机器校验（time_remaining 已由代码计算，但 delta 未校验）
 - Renderer 缺少引用编号系统（CitationManager）
-- MarketProvider 仅返回 current odds，缺少可引用 market metrics
+- 市场指标已有采集，但报告未把指标转成可审计证据（只贴市场链接）
 - 未抓取官方 resolver 页面，无法形成 authoritative evidence
+
+### 0.3 现状校验要点（与当前实现对齐）
+- QueryPlan 多车道搜索已实现（A/B/C + 条件 D），且支持补搜升级 C 为 advanced。
+- `time_remaining` 已由代码计算并注入 LLM 输入；`delta` 仍由 LLM 输出且无一致性校验。
+- EvidenceBuilder 已产出候选证据，但当前 LLM 仅使用 `tavily_results`，未消费候选证据。
+- Prompt/Validator 已允许 `N/A/unknown` 在特定场景出现（如证据不足、情绪无样本）。
 
 ---
 
 ## 1. P0 必做（避免低级错、避免空洞输出）
 
-### P0-1 派生数据全部由代码计算（禁止 LLM 生成）
-**目标：** Δ、剩余时间等不允许出错。
+### P0-1 Δ 一致性校验 + 代码侧派生收口
+**目标：** Δ 不允许出错；time_remaining 已由代码计算但需保持一致。
 
 **改动点**
-- 新增 Step：`metrics.compute.step.ts`（在 render/publish 之前，或在 report.generate 之后、validate 之前）
-- LLM 输出 schema 中移除/标记为 `computed` 的字段（由系统填充）
+- 方案 A（最小改动）：在 Validator 增加 `delta` 一致性校验
+- 方案 B（中等改动）：新增 `metrics.compute.step.ts`，统一由代码填充 `delta/time_remaining` 并覆盖 LLM 输出
 
 **输入**
 - `market_yes_pct`, `market_no_pct`（来自 Polymarket）
 - `ai_yes_pct`（来自 report json）
-- `deadline_ts`, `now_ts`
+- `deadline_ts`, `now_ts`（用于 time_remaining，已在代码侧计算）
 
 **输出（写入 ctx.report_meta 或 report_json.meta）**
 - `delta_pct = ai_yes_pct - market_yes_pct`
@@ -49,20 +55,16 @@
 
 ---
 
-### P0-2 禁止 `N/A / unknown` 作为正文占位符（必须状态化 + 条件渲染）
-**目标：** “没有数据”也要可解释，不能用占位符糊弄。
+### P0-2 控制占位符范围（允许但必须可解释）
+**目标：** “没有数据”要可解释，限制占位符滥用。
 
-**Report JSON 结构建议（示例）**
-```ts
-type SentimentBlock =
-  | { status: "disabled"; reason: string }
-  | { status: "insufficient_sample"; reason: string; sample_n: number }
-  | { status: "ok"; bias: "pro"|"con"|"neutral"; relation: "align"|"diverge"|"none"; sources: EvidenceRef[] };
-```
+**现行允许范围（与 Prompt/Validator 一致）**
+- `disagreement_map.*.time` 在证据不足时可为 `N/A`（且需绑定 market url）
+- `sentiment.samples` 为空时 `bias/relation=unknown`
 
 **实现**
-- Validator：检测正文中出现 `N/A` / `unknown` 字符串 → 直接 fail（`VALIDATOR_PLACEHOLDER_OUTPUT`）
-- Renderer：按 `status` 条件渲染（disabled/insufficient_sample 不输出“unknown”，而输出原因说明）
+- Validator：仅允许上述范围内出现 `N/A/unknown`；其他字段出现视为失败（`VALIDATOR_PLACEHOLDER_OUTPUT`）
+- Renderer：对缺失字段避免直接渲染 `N/A`（可改为说明性文本或隐藏该行）
 
 **补搜策略**
 - 如果 failure 原因是 `insufficient_evidence` / `placeholder_output`：
@@ -71,10 +73,11 @@ type SentimentBlock =
 
 ---
 
-### P0-3 Evidence 相关性过滤：先过滤再让 LLM 写报告
+### P0-3 LLM 输入相关性过滤（先过滤再生成）
 **目标：** 在 LLM 前清掉“不讨论该事件定义”的证据。
 
-**新增 Step：** `evidence.verify.step.ts`（位于 `evidence.build` 之后，`report.generate` 之前）
+**新增 Step：** `tavily.verify.step.ts` 或 `evidence.filter.step.ts`（位于 `search.tavily` 之后、`report.generate` 之前）
+> 关键点：必须输出 **过滤后的 `tavily_results`**，否则对 LLM 无效。
 
 **过滤规则（先硬规则，后可选 embedding）**
 - 必须命中关键词/实体（满足任一）：
@@ -86,7 +89,7 @@ type SentimentBlock =
 - 必须存在 `snippet/raw_content` 片段（没有则降权或丢弃）
 
 **输出**
-- `evidence_list_filtered`
+- `tavily_results_filtered`
 - `dropped_evidence[]`（保留审计：url + reason）
 
 ---
@@ -116,7 +119,10 @@ type SentimentBlock =
 ### P1-2 “市场行为”证据结构化：Market Metrics
 **目标：** 不再把“市场链接”当证据；用可引用的数值指标替代。
 
-**新增 Step：** `market.metrics.step.ts`
+**现状说明**
+- 已有 `price_context.signals` 与 `clob_snapshot`（含 spread、notable_walls、change_24h 等），但报告未显式把指标写成可审计 evidence。
+
+**新增 Step（可选强化）：** `market.metrics.step.ts`
 
 **数据来源**
 - Gamma：当前 Yes/No 价格、市场元数据
@@ -164,24 +170,12 @@ type SentimentBlock =
 - 没锚定判定词：`lapse in appropriations`、`partial shutdown counts` 等是关键 discriminators
 - 没拆分意图：新闻/官方/规则解释/反方证据混在一次搜索里，噪音变大
 
-### 3.2 改为 QueryPlan（多车道、多子查询、可控）
-**核心：Search 不再“一次搜到底”，而是输出 `QueryPlan(tasks[])`。**
+### 3.2 现状：QueryPlan 已实现；需要“更强约束”
+**核心：** 已存在 `TavilyQueryPlan`（A/B/C + 条件 D），需要注入 resolver/判定词/截止时间。
 
 ```ts
-type SearchTask = {
-  lane: "A_news" | "B_background" | "C_official" | "R_rules" | "D_social";
-  query: string; // <= 400 chars
-  params: {
-    topic?: "news" | "general";
-    time_range?: "week" | "month";
-    search_depth?: "basic" | "advanced";
-    include_domains?: string[];
-    exclude_domains?: string[];
-    max_results: number;
-    include_raw_content: boolean;
-  };
-};
-type QueryPlan = { tasks: SearchTask[] };
+type TavilyQueryLane = { lane: "A" | "B" | "C" | "D"; query: string };
+type TavilyQueryPlan = { lanes: TavilyQueryLane[] };
 ```
 
 **示例（对应政府关门市场）**
@@ -189,8 +183,6 @@ type QueryPlan = { tasks: SearchTask[] };
   `US government shutdown lapse in appropriations Jan 31 2026 OPM announcement`
 - Lane C (official)：  
   `Operating Status site:opm.gov shutdown appropriations` 或 `include_domains=["opm.gov"]`
-- Lane R (rules)：  
-  `OPM operating status page definition government shutdown partial shutdown counts`
 
 ### 3.3 QueryBuilder 的硬规则（工程化）
 - 必须注入：
@@ -203,37 +195,37 @@ type QueryPlan = { tasks: SearchTask[] };
 - 必须开启：
   - `include_raw_content=true`（用于 snippet/相关性校验）
 - Validator/Orchestrator 联动：
-  - 若 evidence.verify 丢弃率高 → 触发 lane C advanced 或追加 R_rules
+  - 若相关性丢弃率高 → 触发 lane C advanced 或提升 D lane
 
 ---
 
 ## 4. Pipeline 最小改动（侵入最小但提升显著）
 
-在现有链路中插入/替换如下：
-1. `query.plan.build.step.ts`（改为输出 QueryPlan.tasks[]）
-2. `search.tavily.step.ts`（执行多 task，多 lane 缓存）
-3. `evidence.build.step.ts`（产出 evidence + snippet）
-4. **新增** `evidence.verify.step.ts`（P0）
-5. `report.generate.step.ts`（LLM 只输出 report JSON，不含派生字段）
-6. **新增** `metrics.compute.step.ts`（P0）
-7. `report.validate.step.ts`（增加 placeholder、delta、domains、official 校验）
-8. `telegram.render.step.ts`（引入 CitationManager，条件渲染）
-9. `telegram.publish.step.ts` / `persist.step.ts`
+在现有链路中插入/替换如下（已实现项保留，新增项标注）：
+1. `query.plan.build.step.ts`（已实现：TavilyQueryPlan）
+2. `search.tavily.step.ts`（已实现）
+3. `tavily.verify.step.ts`（新增：过滤不相关结果，输出 filtered tavily_results）
+4. `evidence.build.step.ts`（已实现）
+5. `report.generate.step.ts`（已实现：time_remaining 由代码计算并注入）
+6. `metrics.compute.step.ts`（新增：可选，用于 delta/time_remaining 收口）
+7. `report.validate.step.ts`（新增：delta 一致性、占位符范围、official 证据等）
+8. `telegram.render.step.ts`（可选：引入 CitationManager，条件渲染）
+9. `telegram.publish.step.ts` / `persist.step.ts`（已实现）
 
 ---
 
 ## 5. 交付 TODO（按优先级）
 
 ### P0 TODO（Week 1 必须落地）
-- [ ] Step: `metrics.compute.step.ts`（delta/time_left）
-- [ ] Step: `evidence.verify.step.ts`（相关性过滤 + dropped evidence 审计）
-- [ ] Validator：placeholder 输出拦截、delta 一致性校验、补搜触发码
-- [ ] QueryStrategy：输出 `QueryPlan(tasks[])`（多 lane 多子查询）
-- [ ] Renderer：sentiment/status 条件渲染（禁用/样本不足的明确说明）
+- [ ] Step: `metrics.compute.step.ts`（delta/time_left 收口；或改为 validator 一致性校验）
+- [ ] Step: `tavily.verify.step.ts`（相关性过滤 + dropped evidence 审计）
+- [ ] Validator：占位符范围校验、delta 一致性校验、补搜触发码
+- [x] QueryStrategy：已实现 `TavilyQueryPlan`（多 lane 多子查询）
+- [ ] Renderer：避免直接输出 `N/A`（改为说明或隐藏行）
 
 ### P1 TODO（Week 1.5/Week 2）
 - [ ] CitationManager：正文引用编号 + 文末 sources
-- [ ] Step: `market.metrics.step.ts`（24h 变化/imbalance/walls）
+- [ ] Step: `market.metrics.step.ts`（补齐“市场行为”指标证据化）
 - [ ] Step: `resolution.parse.step.ts` + `official.fetch.step.ts`
 - [ ] Validator：official evidence 必须存在（或 resolution 结构化字段满足）
 
@@ -243,9 +235,9 @@ type QueryPlan = { tasks: SearchTask[] };
 
 ### P0 验收
 - 任一报告不会出现：
-  - `N/A`、`unknown` 占位符（除非是状态化说明）
+  - 非允许字段出现 `N/A`、`unknown` 占位符
   - Δ 错误（delta 必与 ai-market 一致）
-  - 明显不相关引用（被 evidence.verify 过滤）
+  - 明显不相关引用（被 tavily.verify 过滤）
 - validator fail 时：
   - 自动触发补搜一次（lane C advanced）
   - 仍 fail 的报告不发布 TG，且有明确原因
