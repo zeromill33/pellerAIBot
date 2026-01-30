@@ -1,6 +1,7 @@
 import { AppError, createAppError, ERROR_CODES } from "./errors.js";
 import type {
   ClobSnapshot,
+  DroppedEvidence,
   LiquidityProxy,
   MarketContext,
   MarketSignal,
@@ -22,6 +23,7 @@ import { mergeLiquidityProxy } from "./steps/market.liquidity.proxy.step.js";
 import { fetchMarketSignals } from "./steps/market.signals.fetch.step.js";
 import { buildTavilyQueryPlan } from "./steps/query.plan.build.step.js";
 import { searchTavily } from "./steps/search.tavily.step.js";
+import { verifyTavilyResults } from "./steps/tavily.verify.step.js";
 import { buildEvidenceCandidates } from "./steps/evidence.build.step.js";
 import { generateReport } from "./steps/report.generate.step.js";
 import { validateReportJson } from "./steps/report.validate.step.js";
@@ -45,6 +47,8 @@ type PublishPipelineContext = PublishPipelineInput & {
   liquidity_proxy?: LiquidityProxy;
   query_plan?: TavilyQueryPlan;
   tavily_results?: TavilyLaneResult[];
+  tavily_results_filtered?: TavilyLaneResult[];
+  dropped_evidence?: DroppedEvidence[];
   report_json?: ReportV1Json;
   tg_post_text?: string;
 };
@@ -101,7 +105,8 @@ const SUPPLEMENT_ELIGIBLE_CODES = new Set<string>([
   ERROR_CODES.VALIDATOR_DISAGREEMENT_INSUFFICIENT,
   ERROR_CODES.VALIDATOR_FAILURE_MODES_GENERIC,
   ERROR_CODES.VALIDATOR_INSUFFICIENT_URLS,
-  ERROR_CODES.VALIDATOR_PLACEHOLDER_OUTPUT
+  ERROR_CODES.VALIDATOR_PLACEHOLDER_OUTPUT,
+  ERROR_CODES.STEP_TAVILY_RELEVANCE_INSUFFICIENT
 ]);
 
 const SUPPLEMENT_ACTIONS = new Set(["ADD_SEARCH", "supplement_search"]);
@@ -116,6 +121,9 @@ function shouldSupplement(error: AppError): boolean {
 function shouldEnableDLane(error: AppError): boolean {
   if (error.suggestion?.preferred_lane === "D") {
     return true;
+  }
+  if (error.code === ERROR_CODES.STEP_TAVILY_RELEVANCE_INSUFFICIENT) {
+    return false;
   }
   return SUPPLEMENT_ELIGIBLE_CODES.has(error.code);
 }
@@ -237,9 +245,17 @@ async function runSupplementSearch(
     throw error;
   }
 
+  const { tavily_results_filtered, dropped_evidence } = await verifyTavilyResults({
+    request_id: ctx.request_id,
+    run_id: ctx.run_id,
+    event_slug: ctx.event_slug,
+    market_context: ctx.market_context,
+    tavily_results
+  });
+
   const { evidence_candidates } = buildEvidenceCandidates({
     event_slug: ctx.event_slug,
-    tavily_results,
+    tavily_results: tavily_results_filtered,
     market_signals: ctx.market_signals,
     evidence_config: options.evidenceConfig
   });
@@ -251,7 +267,7 @@ async function runSupplementSearch(
       event_slug: ctx.event_slug,
       market_context: ctx.market_context,
       clob_snapshot: ctx.clob_snapshot,
-      tavily_results,
+      tavily_results: tavily_results_filtered,
       market_signals: ctx.market_signals,
       liquidity_proxy: ctx.liquidity_proxy
     },
@@ -266,7 +282,9 @@ async function runSupplementSearch(
   return {
     ...ctx,
     query_plan,
-    tavily_results,
+    tavily_results: tavily_results_filtered,
+    tavily_results_filtered,
+    dropped_evidence,
     evidence_candidates,
     report_json: validated.report_json
   };
@@ -426,6 +444,36 @@ function buildPublishPipelineSteps(
       }
     },
     {
+      id: "tavily.verify",
+      input_keys: ["TavilyLaneResult"],
+      output_keys: ["TavilyLaneResultFiltered", "DroppedEvidence"],
+      run: async (ctx) => {
+        if (!ctx.market_context || !ctx.tavily_results) {
+          throw createAppError({
+            code: ERROR_CODES.ORCH_PIPELINE_FAILED,
+            message: "Missing market_context/tavily_results for tavily.verify",
+            category: "INTERNAL",
+            retryable: false,
+            details: { event_slug: ctx.event_slug }
+          });
+        }
+        const { tavily_results_filtered, dropped_evidence } =
+          await verifyTavilyResults({
+            request_id: ctx.request_id,
+            run_id: ctx.run_id,
+            event_slug: ctx.event_slug,
+            market_context: ctx.market_context,
+            tavily_results: ctx.tavily_results
+          });
+        return {
+          ...ctx,
+          tavily_results: tavily_results_filtered,
+          tavily_results_filtered,
+          dropped_evidence
+        };
+      }
+    },
+    {
       id: "evidence.build",
       input_keys: ["TavilyLaneResult"],
       output_keys: ["EvidenceCandidate"],
@@ -453,6 +501,9 @@ function buildPublishPipelineSteps(
       input_keys: ["MarketContext", "ClobSnapshot", "TavilyLaneResult"],
       output_keys: ["ReportV1Json"],
       run: async (ctx) => {
+        if (ctx.report_json) {
+          return { ...ctx };
+        }
         if (!ctx.market_context || !ctx.tavily_results) {
           throw createAppError({
             code: ERROR_CODES.STEP_REPORT_GENERATE_MISSING_INPUT,
@@ -631,13 +682,13 @@ async function runPublishPipelineSteps(
       };
       options.logStep?.(logEntry, ctx);
       if (
-        step.id === "report.validate" &&
+        (step.id === "report.validate" || step.id === "tavily.verify") &&
         !supplementAttempted &&
         shouldSupplement(appError)
       ) {
         supplementAttempted = true;
         ctx = await runSupplementSearch(ctx, options.stepOptions ?? {}, appError);
-        if (stopStepId === "report.validate") {
+        if (stopStepId === step.id) {
           break;
         }
         continue;

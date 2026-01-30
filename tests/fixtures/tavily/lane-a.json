@@ -1,17 +1,24 @@
 {
   "results": [
     {
-      "title": "Example headline",
+      "title": "Government shutdown update",
       "url": "https://example.com/news/item",
-      "raw_content": "Raw content A",
-      "published_date": "2025-01-02T00:00:00Z"
+      "raw_content": "U.S. government shutdown update with official details.",
+      "published_date": "2026-01-28T00:00:00Z"
     },
     {
-      "title": "Another source",
+      "title": "Shutdown negotiations continue",
       "url": "https://news.example.org/article",
-      "content": "Fallback content",
-      "published_at": "2025-01-01T12:00:00Z",
+      "content": "Latest coverage on government shutdown discussions.",
+      "published_at": "2026-01-27T12:00:00Z",
       "domain": "news.example.org"
+    },
+    {
+      "title": "Operating status guidance",
+      "url": "https://example.net/official/statement",
+      "raw_content": "Operating Status guidance related to U.S. government shutdown.",
+      "published_at": "2026-01-26T08:00:00Z",
+      "domain": "example.net"
     }
   ]
 }

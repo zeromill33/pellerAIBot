@@ -181,6 +181,15 @@ export type TavilyLaneResult = {
   results: TavilySearchResult[];
 };
 
+export type DroppedEvidence = {
+  url: string;
+  reason: string;
+  lane: TavilyLane;
+  query: string;
+  title?: string;
+  published_at?: string;
+};
+
 export type EvidenceSourceType =
   | "official"
   | "media"

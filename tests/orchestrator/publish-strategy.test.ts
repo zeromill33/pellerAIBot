@@ -149,7 +149,15 @@ const tavilyProvider: TavilyProvider = {
     return {
       lane: input.lane,
       query: input.query,
-      results: [],
+      results: [
+        {
+          title: "Test event update",
+          url: `https://example.com/${input.lane}/1`,
+          domain: "example.com",
+          published_at: "2026-01-28T00:00:00Z",
+          raw_content: "Test event update with relevant details."
+        }
+      ],
       cache_hit: false,
       rate_limited: false,
       latency_ms: 1
