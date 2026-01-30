@@ -13,7 +13,12 @@ const REQUIRED_TOP_LEVEL_KEYS = [
   "limitations",
   "ai_vs_market"
 ] as const;
+const OPTIONAL_TOP_LEVEL_KEYS = ["official_sources", "official_sources_error"] as const;
 const REQUIRED_TOP_LEVEL_KEY_SET = new Set<string>(REQUIRED_TOP_LEVEL_KEYS);
+const ALLOWED_TOP_LEVEL_KEYS = new Set<string>([
+  ...REQUIRED_TOP_LEVEL_KEYS,
+  ...OPTIONAL_TOP_LEVEL_KEYS
+]);
 
 const ALLOWED_SOURCE_TYPES = new Set([
   "官方公告",
@@ -72,6 +77,26 @@ function expectArray(value: unknown, path: string): unknown[] {
 function expectNonEmptyString(value: unknown, path: string): string {
   if (typeof value !== "string" || value.trim().length === 0) {
     invalid(`Expected non-empty string at ${path}`, { path });
+  }
+  return value;
+}
+
+function expectNullableString(value: unknown, path: string): string | null {
+  if (value === null) {
+    return null;
+  }
+  if (typeof value !== "string" || value.trim().length === 0) {
+    invalid(`Expected string or null at ${path}`, { path });
+  }
+  return value;
+}
+
+function expectNullableBoolean(value: unknown, path: string): boolean | null {
+  if (value === null) {
+    return null;
+  }
+  if (typeof value !== "boolean") {
+    invalid(`Expected boolean or null at ${path}`, { path });
   }
   return value;
 }
@@ -142,7 +167,7 @@ function parseJsonStrict(text: string): unknown {
 function validateTopLevel(report: ReportObject) {
   const keys = Object.keys(report);
   const missing = REQUIRED_TOP_LEVEL_KEYS.filter((key) => !(key in report));
-  const extra = keys.filter((key) => !REQUIRED_TOP_LEVEL_KEY_SET.has(key));
+  const extra = keys.filter((key) => !ALLOWED_TOP_LEVEL_KEYS.has(key));
   if (missing.length > 0 || extra.length > 0) {
     invalid("Report JSON top-level keys mismatch", { missing, extra });
   }
@@ -173,6 +198,59 @@ function validateContext(report: ReportObject) {
     0,
     "context.liquidity_proxy.spread"
   );
+  if ("resolution_structured" in context && context.resolution_structured !== null) {
+    const structured = expectObject(
+      context.resolution_structured,
+      "context.resolution_structured"
+    );
+    if ("deadline_ts" in structured) {
+      if (structured.deadline_ts !== null) {
+        expectNumberInRange(
+          structured.deadline_ts,
+          0,
+          Number.MAX_SAFE_INTEGER,
+          "context.resolution_structured.deadline_ts"
+        );
+      }
+    } else {
+      invalid("Missing deadline_ts in context.resolution_structured", {
+        path: "context.resolution_structured.deadline_ts"
+      });
+    }
+    if ("resolver_url" in structured) {
+      expectNullableString(
+        structured.resolver_url,
+        "context.resolution_structured.resolver_url"
+      );
+    } else {
+      invalid("Missing resolver_url in context.resolution_structured", {
+        path: "context.resolution_structured.resolver_url"
+      });
+    }
+    if ("partial_shutdown_counts" in structured) {
+      expectNullableBoolean(
+        structured.partial_shutdown_counts,
+        "context.resolution_structured.partial_shutdown_counts"
+      );
+    } else {
+      invalid("Missing partial_shutdown_counts in context.resolution_structured", {
+        path: "context.resolution_structured.partial_shutdown_counts"
+      });
+    }
+    const exclusions = expectArray(
+      structured.exclusions,
+      "context.resolution_structured.exclusions"
+    );
+    exclusions.forEach((item, index) => {
+      expectNonEmptyString(item, `context.resolution_structured.exclusions[${index}]`);
+    });
+    if ("parse_error" in structured && structured.parse_error !== undefined) {
+      expectNonEmptyString(
+        structured.parse_error,
+        "context.resolution_structured.parse_error"
+      );
+    }
+  }
 }
 
 function validateAiVsMarket(report: ReportObject) {
@@ -359,6 +437,30 @@ function validateLimitations(report: ReportObject) {
   }
 }
 
+function validateOfficialSources(report: ReportObject) {
+  if ("official_sources" in report && report.official_sources !== undefined) {
+    const sources = expectArray(report.official_sources, "official_sources");
+    sources.forEach((item, index) => {
+      const entry = expectObject(item, `official_sources[${index}]`);
+      expectNonEmptyString(entry.url, `official_sources[${index}].url`);
+      expectNonEmptyString(entry.domain, `official_sources[${index}].domain`);
+      expectNonEmptyString(entry.title, `official_sources[${index}].title`);
+      expectNonEmptyString(
+        entry.published_at,
+        `official_sources[${index}].published_at`
+      );
+      const snippet = expectNonEmptyString(
+        entry.snippet,
+        `official_sources[${index}].snippet`
+      );
+      assertMaxLength(snippet, 280, `official_sources[${index}].snippet`);
+    });
+  }
+  if ("official_sources_error" in report && report.official_sources_error !== undefined) {
+    expectNonEmptyString(report.official_sources_error, "official_sources_error");
+  }
+}
+
 export function postprocessReportV1Json(text: string): ReportV1Json {
   const parsed = parseJsonStrict(text);
   const report = expectObject(parsed, "report");
@@ -372,5 +474,6 @@ export function postprocessReportV1Json(text: string): ReportV1Json {
   validateRiskAttribution(report);
   validateLimitations(report);
   validateSentiment(report);
+  validateOfficialSources(report);
   return report;
 }

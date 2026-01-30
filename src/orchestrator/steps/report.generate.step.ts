@@ -5,7 +5,9 @@ import type {
   LiquidityProxy,
   MarketContext,
   MarketSignal,
+  OfficialSource,
   PriceContext,
+  ResolutionStructured,
   TavilyLane,
   TavilyLaneResult,
   TavilySearchResult
@@ -29,6 +31,9 @@ type ReportGenerateInput = {
   tavily_results?: TavilyLaneResult[];
   market_signals?: MarketSignal[];
   liquidity_proxy?: LiquidityProxy;
+  resolution_structured?: ResolutionStructured | null;
+  official_sources?: OfficialSource[];
+  official_sources_error?: string;
 };
 
 type ReportGenerateOutput = {
@@ -373,6 +378,31 @@ function buildMarketContextInput(
   };
 }
 
+function mergeOfficialAndResolution(
+  report_json: ReportV1Json,
+  resolution_structured: ResolutionStructured | null,
+  official_sources: OfficialSource[],
+  official_sources_error?: string
+): ReportV1Json {
+  if (!report_json || typeof report_json !== "object" || Array.isArray(report_json)) {
+    return report_json;
+  }
+  const report = { ...(report_json as Record<string, unknown>) };
+  const context =
+    report.context && typeof report.context === "object" && !Array.isArray(report.context)
+      ? { ...(report.context as Record<string, unknown>) }
+      : {};
+  if (resolution_structured) {
+    context.resolution_structured = resolution_structured;
+  }
+  report.context = context;
+  report.official_sources = official_sources;
+  if (official_sources_error) {
+    report.official_sources_error = official_sources_error;
+  }
+  return report as ReportV1Json;
+}
+
 function buildEvidenceDigest(tavily_results: TavilyLaneResult[]): EvidenceDigest {
   return {
     tavily_results: normalizeTavilyResults(tavily_results)
@@ -406,16 +436,26 @@ export async function generateReport(
   const provider = options.provider ?? createLLMProvider();
   const context = buildMarketContextInput(input);
   const evidence = buildEvidenceDigest(input.tavily_results);
+  const resolution_structured = input.resolution_structured ?? null;
+  const official_sources = input.official_sources ?? [];
   const marketMetricsSummary = buildMarketMetricsSummary(input);
   const llmInput: LlmReportInput = {
     context,
     evidence,
     clob: normalizeClobSnapshot(input.clob_snapshot),
     market_metrics_summary: marketMetricsSummary,
+    resolution_structured,
+    official_sources,
+    official_sources_error: input.official_sources_error,
     config: { aiProbabilityScale: "0-100" }
   };
 
-  const report_json = await provider.generateReportV1(llmInput);
+  const report_json = mergeOfficialAndResolution(
+    await provider.generateReportV1(llmInput),
+    resolution_structured,
+    official_sources,
+    input.official_sources_error
+  );
 
   return {
     market_context: input.market_context,

@@ -17,8 +17,15 @@ function buildValidReport(): ReportV1Json {
         gamma_liquidity: 1200,
         book_depth_top10: 40,
         spread: 0.02
+      },
+      resolution_structured: {
+        deadline_ts: 1767225540000,
+        resolver_url: "https://official.example.com/resolution",
+        partial_shutdown_counts: false,
+        exclusions: ["Acting appointments will not count."]
       }
     },
+    official_sources: [],
     market_framing: {
       core_bet: "Core framing statement.",
       key_assumption: "Key assumption text."
@@ -204,7 +211,14 @@ describe("pipeline supplement search", () => {
           pricingProvider,
           tavilyProvider,
           llmProvider,
-          marketSignalsTopMarkets: 0
+          marketSignalsTopMarkets: 0,
+          officialFetch: {
+            fetch: async () => ({
+              ok: false,
+              status: 404,
+              text: async () => ""
+            })
+          }
         }
       }
     );
@@ -270,7 +284,14 @@ describe("pipeline supplement search", () => {
             pricingProvider,
             tavilyProvider,
             llmProvider,
-            marketSignalsTopMarkets: 0
+            marketSignalsTopMarkets: 0,
+            officialFetch: {
+              fetch: async () => ({
+                ok: false,
+                status: 404,
+                text: async () => ""
+              })
+            }
           }
         }
       )

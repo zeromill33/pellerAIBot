@@ -22,8 +22,23 @@ function buildValidReport(): ReportV1Json {
         gamma_liquidity: 1200,
         book_depth_top10: 40,
         spread: 0.02
+      },
+      resolution_structured: {
+        deadline_ts: 1767225540000,
+        resolver_url: "https://official.example.com/resolution",
+        partial_shutdown_counts: false,
+        exclusions: ["Acting appointments will not count."]
       }
     },
+    official_sources: [
+      {
+        url: "https://official.example.com/resolution",
+        domain: "official.example.com",
+        title: "Official Resolution",
+        published_at: "2026-01-02T00:00:00Z",
+        snippet: "Official resolution details."
+      }
+    ],
     market_framing: {
       core_bet: "Core framing statement.",
       key_assumption: "Key assumption text."
@@ -216,6 +231,13 @@ describe("publish strategy", () => {
           tavilyProvider,
           llmProvider,
           marketSignalsTopMarkets: 0,
+          officialFetch: {
+            fetch: async () => ({
+              ok: false,
+              status: 404,
+              text: async () => ""
+            })
+          },
           storage,
           telegramPublisher,
           publishConfig: { strategy: "auto" }
@@ -248,6 +270,13 @@ describe("publish strategy", () => {
           tavilyProvider,
           llmProvider,
           marketSignalsTopMarkets: 0,
+          officialFetch: {
+            fetch: async () => ({
+              ok: false,
+              status: 404,
+              text: async () => ""
+            })
+          },
           storage,
           telegramPublisher,
           publishConfig: { strategy: "approve" }
@@ -287,6 +316,13 @@ describe("publish strategy", () => {
             tavilyProvider,
             llmProvider,
             marketSignalsTopMarkets: 0,
+            officialFetch: {
+              fetch: async () => ({
+                ok: false,
+                status: 404,
+                text: async () => ""
+              })
+            },
             storage,
             telegramPublisher,
             publishConfig: { strategy: "auto" }

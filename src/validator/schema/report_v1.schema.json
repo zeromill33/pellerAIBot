@@ -50,9 +50,15 @@
             "book_depth_top10": { "type": ["number", "null"], "minimum": 0 },
             "spread": { "type": ["number", "null"], "minimum": 0 }
           }
-        }
+        },
+        "resolution_structured": { "$ref": "#/$defs/resolutionStructured" }
       }
     },
+    "official_sources": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/officialSource" }
+    },
+    "official_sources_error": { "type": "string", "minLength": 1 },
     "market_framing": {
       "type": "object",
       "additionalProperties": false,
@@ -236,6 +242,33 @@
           "type": "string",
           "enum": ["官方公告", "主流媒体", "社交讨论", "链上数据", "市场行为"]
         }
+      }
+    },
+    "resolutionStructured": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["deadline_ts", "resolver_url", "partial_shutdown_counts", "exclusions"],
+      "properties": {
+        "deadline_ts": { "type": ["number", "null"] },
+        "resolver_url": { "type": ["string", "null"] },
+        "partial_shutdown_counts": { "type": ["boolean", "null"] },
+        "exclusions": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "parse_error": { "type": "string", "minLength": 1 }
+      }
+    },
+    "officialSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url", "domain", "title", "published_at", "snippet"],
+      "properties": {
+        "url": { "type": "string", "minLength": 1 },
+        "domain": { "type": "string", "minLength": 1 },
+        "title": { "type": "string", "minLength": 1 },
+        "published_at": { "type": "string", "minLength": 1 },
+        "snippet": { "type": "string", "minLength": 1, "maxLength": 280 }
       }
     }
   }

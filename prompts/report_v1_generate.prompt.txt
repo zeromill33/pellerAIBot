@@ -24,13 +24,18 @@ SYSTEM:
 11) disagreement_map 中必须至少包含 1 条 source_type="市场行为" 的 evidenceItem：
    - 指标可用时，claim 必须引用 market_metrics_summary 的数值指标（如 24h 变化、spread、墙）。
    - 若 market_metrics_summary.availability="unavailable"，可选择跳过该 evidence，或用 claim 说明“指标不可用原因”，不得虚构数值。
-12) limitations.not_included 必须包含 no_bet_advice 与 no_position_sizing（固定免责声明）。
+12) context.resolution_structured 必须来自输入的 resolution_structured，不得改写或虚构字段。
+13) official_sources 必须来自输入的 official_sources；如 official_sources_error 有值，说明抓取失败原因，不得虚构官方证据。
+14) limitations.not_included 必须包含 no_bet_advice 与 no_position_sizing（固定免责声明）。
 
 USER:
 给定以下输入数据：
 - market_context: {title, url, resolution_rules_raw, end_time, market_odds_yes, market_odds_no, liquidity_proxy, price_context}
 - clob_snapshot: {book_top_levels, spread, midpoint, notable_walls, price_change_24h}
 - market_metrics_summary: {availability, reason, price_signals, clob_metrics}
+- resolution_structured: {deadline_ts, resolver_url, partial_shutdown_counts, exclusions, parse_error}
+- official_sources: [{url, domain, title, published_at, snippet}]
+- official_sources_error: 可选字符串，表示官方抓取失败原因
 - tavily_results: 一个数组，每个元素包含 {lane, query, results:[{title,url,domain,published_at,raw_content}]}
 
 其中 price_context 结构为：

@@ -47,7 +47,10 @@ function buildPromptInput(input: LlmReportInput): LlmPromptInput {
     market_context: input.context,
     clob_snapshot: input.clob ?? null,
     tavily_results: input.evidence.tavily_results,
-    market_metrics_summary: input.market_metrics_summary
+    market_metrics_summary: input.market_metrics_summary,
+    resolution_structured: input.resolution_structured,
+    official_sources: input.official_sources,
+    official_sources_error: input.official_sources_error
   };
 }
 

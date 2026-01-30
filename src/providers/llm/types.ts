@@ -2,7 +2,9 @@ import type {
   ClobSnapshot,
   LiquidityProxy,
   MarketContext,
+  OfficialSource,
   PriceContext,
+  ResolutionStructured,
   TavilyLaneResult
 } from "../../orchestrator/types.js";
 
@@ -61,6 +63,9 @@ export type LlmReportInput = {
   evidence: EvidenceDigest;
   clob?: ClobSnapshot | null;
   market_metrics_summary: MarketMetricsSummary;
+  resolution_structured: ResolutionStructured | null;
+  official_sources: OfficialSource[];
+  official_sources_error?: string;
   config: { aiProbabilityScale: "0-100" };
 };
 
@@ -71,6 +76,9 @@ export type LlmPromptInput = {
   clob_snapshot: ClobSnapshot | null;
   tavily_results: TavilyLaneResult[];
   market_metrics_summary: MarketMetricsSummary;
+  resolution_structured: ResolutionStructured | null;
+  official_sources: OfficialSource[];
+  official_sources_error?: string;
 };
 
 export type LLMProvider = {

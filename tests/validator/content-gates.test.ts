@@ -12,11 +12,26 @@ function buildValidReport() {
       time_remaining: "10d",
       market_odds: { yes: 55, no: 45 },
       liquidity_proxy: {
-        gamma_liquidity: 1200,
-        book_depth_top10: 40,
-        spread: 0.02
-      }
+      gamma_liquidity: 1200,
+      book_depth_top10: 40,
+      spread: 0.02
     },
+    resolution_structured: {
+      deadline_ts: 1767225540000,
+      resolver_url: "https://official.example.com/resolution",
+      partial_shutdown_counts: false,
+      exclusions: ["Acting appointments will not count."]
+    }
+  },
+  official_sources: [
+    {
+      url: "https://official.example.com/resolution",
+      domain: "official.example.com",
+      title: "Official Resolution",
+      published_at: "2026-01-02T00:00:00Z",
+      snippet: "Official resolution details."
+    }
+  ],
     market_framing: {
       core_bet: "Core framing statement.",
       key_assumption: "Key assumption text."
@@ -120,6 +135,17 @@ describe("validator content gates", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.code).toBe(ERROR_CODES.VALIDATOR_RESOLUTION_RULES_MISSING);
+    }
+  });
+
+  it("blocks missing official sources and resolution structured", () => {
+    const report = buildValidReport();
+    delete (report.context as { resolution_structured?: unknown }).resolution_structured;
+    delete (report as { official_sources?: unknown }).official_sources;
+    const result = validateContentGates(report);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe(ERROR_CODES.VALIDATOR_MISSING_OFFICIAL_SOURCE);
     }
   });
 

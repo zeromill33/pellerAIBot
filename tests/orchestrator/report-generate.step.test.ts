@@ -130,7 +130,22 @@ describe("report.generate step", () => {
         market_context: marketContext,
         clob_snapshot: clobSnapshot,
         tavily_results: tavilyResults,
-        liquidity_proxy: liquidityProxy
+        liquidity_proxy: liquidityProxy,
+        resolution_structured: {
+          deadline_ts: 1767225540000,
+          resolver_url: "https://official.example.com/resolution",
+          partial_shutdown_counts: false,
+          exclusions: ["Acting appointments will not count."]
+        },
+        official_sources: [
+          {
+            url: "https://official.example.com/resolution",
+            domain: "official.example.com",
+            title: "Official Resolution",
+            published_at: "2026-01-02T00:00:00Z",
+            snippet: "Official resolution details."
+          }
+        ]
       },
       { provider }
     );
@@ -182,6 +197,21 @@ describe("report.generate step", () => {
         top_wall: null
       }
     });
+    expect(input.resolution_structured).toEqual({
+      deadline_ts: 1767225540000,
+      resolver_url: "https://official.example.com/resolution",
+      partial_shutdown_counts: false,
+      exclusions: ["Acting appointments will not count."]
+    });
+    expect(input.official_sources).toEqual([
+      {
+        url: "https://official.example.com/resolution",
+        domain: "official.example.com",
+        title: "Official Resolution",
+        published_at: "2026-01-02T00:00:00Z",
+        snippet: "Official resolution details."
+      }
+    ]);
 
     const lanes = input.evidence.tavily_results.map((lane) => lane.lane);
     expect(lanes).toEqual(["A", "B"]);
@@ -284,5 +314,7 @@ describe("report.generate step", () => {
       price_signals: null,
       clob_metrics: null
     });
+    expect(input.resolution_structured).toBeNull();
+    expect(input.official_sources).toEqual([]);
   });
 });

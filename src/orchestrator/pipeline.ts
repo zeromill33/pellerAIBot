@@ -5,8 +5,10 @@ import type {
   LiquidityProxy,
   MarketContext,
   MarketSignal,
+  OfficialSource,
   PublishPipelineInput,
   PublishPipelineResult,
+  ResolutionStructured,
   TavilyLaneResult,
   TavilyQueryPlan
 } from "./types.js";
@@ -25,6 +27,9 @@ import { buildTavilyQueryPlan } from "./steps/query.plan.build.step.js";
 import { searchTavily } from "./steps/search.tavily.step.js";
 import { verifyTavilyResults } from "./steps/tavily.verify.step.js";
 import { buildEvidenceCandidates } from "./steps/evidence.build.step.js";
+import { parseResolutionRules } from "./steps/resolution.parse.step.js";
+import { fetchOfficialSource } from "./steps/official.fetch.step.js";
+import type { OfficialFetchOptions } from "./steps/official.fetch.step.js";
 import { generateReport } from "./steps/report.generate.step.js";
 import { validateReportJson } from "./steps/report.validate.step.js";
 import { renderTelegramDraft } from "./steps/telegram.render.step.js";
@@ -49,6 +54,9 @@ type PublishPipelineContext = PublishPipelineInput & {
   tavily_results?: TavilyLaneResult[];
   tavily_results_filtered?: TavilyLaneResult[];
   dropped_evidence?: DroppedEvidence[];
+  resolution_structured?: ResolutionStructured;
+  official_sources?: OfficialSource[];
+  official_sources_error?: string;
   report_json?: ReportV1Json;
   tg_post_text?: string;
 };
@@ -92,6 +100,7 @@ type PipelineStepOptions = {
   marketSignalsTopMarkets?: number;
   marketSignalsWindowHours?: number;
   marketSignalsIntervalHours?: number;
+  officialFetch?: OfficialFetchOptions;
 };
 
 type PublishPipelineRuntimeOptions = {
@@ -325,6 +334,42 @@ function buildPublishPipelineSteps(
       }
     },
     {
+      id: "resolution.parse",
+      input_keys: ["MarketContext"],
+      output_keys: ["ResolutionStructured"],
+      run: async (ctx) => {
+        if (!ctx.market_context) {
+          throw createAppError({
+            code: ERROR_CODES.ORCH_PIPELINE_FAILED,
+            message: "Missing market_context for resolution.parse",
+            category: "INTERNAL",
+            retryable: false,
+            details: { event_slug: ctx.event_slug }
+          });
+        }
+        const { resolution_structured } = await parseResolutionRules({
+          event_slug: ctx.event_slug,
+          resolution_rules_raw: ctx.market_context.resolution_rules_raw,
+          resolution_source_raw: ctx.market_context.resolution_source_raw
+        });
+        return { ...ctx, resolution_structured };
+      }
+    },
+    {
+      id: "official.fetch",
+      input_keys: ["ResolutionStructured"],
+      output_keys: ["OfficialSource"],
+      run: async (ctx) => {
+        const resolver_url = ctx.resolution_structured?.resolver_url ?? null;
+        const { official_sources, official_sources_error } =
+          await fetchOfficialSource({
+            event_slug: ctx.event_slug,
+            resolver_url
+          }, options.officialFetch);
+        return { ...ctx, official_sources, official_sources_error };
+      }
+    },
+    {
       id: "market.signals",
       input_keys: ["MarketContext"],
       output_keys: ["MarketSignals"],
@@ -524,7 +569,10 @@ function buildPublishPipelineSteps(
             clob_snapshot: ctx.clob_snapshot,
             tavily_results: ctx.tavily_results,
             market_signals: ctx.market_signals,
-            liquidity_proxy: ctx.liquidity_proxy
+            liquidity_proxy: ctx.liquidity_proxy,
+            resolution_structured: ctx.resolution_structured ?? null,
+            official_sources: ctx.official_sources ?? [],
+            official_sources_error: ctx.official_sources_error
           },
           { provider: options.llmProvider }
         );

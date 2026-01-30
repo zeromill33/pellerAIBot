@@ -181,6 +181,22 @@ export type TavilyLaneResult = {
   results: TavilySearchResult[];
 };
 
+export type ResolutionStructured = {
+  deadline_ts: number | null;
+  resolver_url: string | null;
+  partial_shutdown_counts: boolean | null;
+  exclusions: string[];
+  parse_error?: string;
+};
+
+export type OfficialSource = {
+  url: string;
+  domain: string;
+  title: string;
+  published_at: string;
+  snippet: string;
+};
+
 export type DroppedEvidence = {
   url: string;
   reason: string;

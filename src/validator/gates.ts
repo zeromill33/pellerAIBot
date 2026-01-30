@@ -105,7 +105,21 @@ type ReportV1 = {
   context: {
     resolution_rules_raw: string;
     url: string;
+    resolution_structured?: {
+      deadline_ts: number | null;
+      resolver_url: string | null;
+      partial_shutdown_counts: boolean | null;
+      exclusions: string[];
+      parse_error?: string;
+    };
   };
+  official_sources?: Array<{
+    url: string;
+    domain: string;
+    title: string;
+    published_at: string;
+    snippet: string;
+  }>;
   market_framing: {
     core_bet: string;
     key_assumption: string;
@@ -306,6 +320,21 @@ export function validateContentGates(
       ok: false,
       code: ERROR_CODES.VALIDATOR_RESOLUTION_RULES_MISSING,
       message: "context.resolution_rules_raw is required"
+    };
+  }
+
+  const hasResolutionStructured = !!report.context?.resolution_structured;
+  const hasOfficialSources =
+    Array.isArray(report.official_sources) && report.official_sources.length > 0;
+  if (!hasResolutionStructured && !hasOfficialSources) {
+    return {
+      ok: false,
+      code: ERROR_CODES.VALIDATOR_MISSING_OFFICIAL_SOURCE,
+      message: "Missing resolution_structured and official_sources",
+      details: {
+        resolution_structured: hasResolutionStructured,
+        official_sources: report.official_sources?.length ?? 0
+      }
     };
   }
 
