@@ -14,8 +14,7 @@ for arg in "$@"; do
 done
 
 if [[ ${#URLS[@]} -eq 0 ]]; then
-  URLS+=("https://polymarket.com/event/who-will-trump-nominate-as-fed-chair")
-  URLS+=("https://polymarket.com/event/what-price-will-bitcoin-hit-before-2027")
+  URLS+=("https://polymarket.com/event/will-there-be-another-us-government-shutdown-by-january-31")
 fi
 
 if [[ -z "${TOP_MARKETS}" ]]; then

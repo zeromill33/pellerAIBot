@@ -27,7 +27,14 @@ const ALLOWED_RISK_ATTRIBUTION = new Set([
   "info",
   "interpretation",
   "time",
-  "market_structure"
+  "market_structure",
+  "political landscape"
+]);
+
+const RISK_ATTRIBUTION_ALIASES = new Map<string, string>([
+  ["political dynamics", "political landscape"],
+  ["political environment", "political landscape"],
+  ["political risk", "political landscape"]
 ]);
 
 const REQUIRED_NOT_INCLUDED = ["no_bet_advice", "no_position_sizing"] as const;
@@ -273,11 +280,22 @@ function validateRiskAttribution(report: ReportObject) {
     });
   }
   riskAttribution.forEach((item, index) => {
-    if (typeof item !== "string" || !ALLOWED_RISK_ATTRIBUTION.has(item)) {
+    if (typeof item !== "string") {
       invalid("risk_attribution value invalid", {
         index,
         value: item
       });
+    }
+    const normalized = item.trim().toLowerCase();
+    const canonical = RISK_ATTRIBUTION_ALIASES.get(normalized) ?? normalized;
+    if (!ALLOWED_RISK_ATTRIBUTION.has(canonical)) {
+      invalid("risk_attribution value invalid", {
+        index,
+        value: item
+      });
+    }
+    if (canonical !== item) {
+      riskAttribution[index] = canonical;
     }
   });
 }
