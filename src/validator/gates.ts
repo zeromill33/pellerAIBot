@@ -44,7 +44,7 @@ const ALLOWED_SOURCE_TYPES = new Set([
 
 const DEFAULT_GATE_CONFIG = {
   minFailureSignalLength: 20,
-  minDistinctUrls: 4,
+  minDistinctUrls: 3,
   minDistinctDomains: 2,
   callToActionKeywords: DEFAULT_CALL_TO_ACTION_KEYWORDS
 } as const;

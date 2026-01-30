@@ -13,11 +13,13 @@
 
 ## 可选环境变量
 
-- `E2E_EVENT_URL=...`：指定事件 URL（默认 Fed Chair 示例）
+- `E2E_EVENT_URL=...`：指定事件 URL（默认 US government shutdown by Jan 31 示例）
 - `E2E_TOP_MARKETS=...`：market.signals 探测数量（默认 3）
 - `E2E_FORCE_D=1`：强制启用 D 车道
 - `E2E_TIMEOUT_MS=...`：覆盖单测超时（建议真实 LLM 60–120s）
-- `E2E_STOP_STEP=...`：指定停止 step（默认到 report.generate/validate）
+- `E2E_STOP_STEP=...`：指定停止 step（默认到 telegram.publish）
+- `E2E_TG_PREVIEW_PATH=...`：TG 预览内容输出路径（默认 tests/e2e/tmp/tg-preview.md）
+- `E2E_TG_PREVIEW_PATH_D=...`：D 车道用例 TG 预览内容输出路径（默认 tests/e2e/tmp/tg-preview-dlane.md）
 - `LLM_MODEL=...`、`LLM_TEMPERATURE=...`、`LLM_TIMEOUT_MS=...`
 
 ## 运行示例

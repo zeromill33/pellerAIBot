@@ -8,12 +8,24 @@ import {
   type PipelineStepLog,
   type PublishPipelineContext
 } from "../../src/orchestrator/pipeline.js";
+import type { TavilySearchResult, MarketContext, GammaMarket } from "../../src/orchestrator/types.js";
 import { createAppError } from "../../src/orchestrator/errors.js";
 import { parseUrlsToSlugs } from "../../src/orchestrator/steps/url.parse.step.js";
 import { createGammaProvider } from "../../src/providers/polymarket/gamma.js";
 import { createClobProvider } from "../../src/providers/polymarket/clob.js";
 import { createPricingProvider } from "../../src/providers/polymarket/pricing.js";
 import { createLLMProvider } from "../../src/providers/llm/index.js";
+import { createTavilyProvider } from "../../src/providers/tavily/index.js";
+import { loadTavilyConfig } from "../../src/config/load.js";
+import type {
+  StorageAdapter,
+  ReportPublishUpdate,
+  ReportStatusUpdate,
+  EventRecord,
+  EvidenceRecord,
+  ReportRecord,
+  ReportStatusRecord
+} from "../../src/storage/index.js";
 
 // RUN_E2E=1 启用；TEST_LIVE=1 走真实 provider（需网络/必要密钥，默认走 fixtures）。
 // E2E_LLM_LIVE=1 使用真实 LLM（需 LLM_API_KEY，默认 mock）。
@@ -23,6 +35,8 @@ import { createLLMProvider } from "../../src/providers/llm/index.js";
 // E2E_TIMEOUT_MS 可覆盖单测超时时间（毫秒）。
 // E2E_SUMMARY_PATH 指定输出摘要文件路径（默认 tests/e2e/tmp/e2e-step-summary.json），
 // E2E_SUMMARY_PATH_D 指定 D 车道用例摘要路径（默认 tests/e2e/tmp/e2e-step-summary-dlane.json）。
+// E2E_TG_PREVIEW_PATH 指定 TG 预览内容输出路径（默认 tests/e2e/tmp/tg-preview.md），
+// E2E_TG_PREVIEW_PATH_D 指定 D 车道 TG 预览内容输出路径（默认 tests/e2e/tmp/tg-preview-dlane.md）。
 const describeE2E = process.env.RUN_E2E === "1" ? describe : describe.skip;
 
 type MockResponse = {
@@ -49,24 +63,127 @@ function loadFixture(path: string) {
   ) as unknown;
 }
 
-function createGammaFixtureProvider() {
-  const events = loadFixture("real-events.json");
-  const markets = loadFixture("real-markets.json");
-  const fetch = async (input: string) => {
-    if (input.includes("/events")) {
-      return createMockResponse({ status: 200, payload: events });
+function loadTavilyFixture(path: string) {
+  return JSON.parse(
+    readFileSync(new URL(`../fixtures/tavily/${path}`, import.meta.url), "utf-8")
+  ) as unknown;
+}
+
+function parseDomain(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    return parsed.hostname.trim().toLowerCase() || null;
+  } catch {
+    return null;
+  }
+}
+
+function createTavilyFixtureProvider() {
+  const payload = loadTavilyFixture("lane-a.json") as Record<string, unknown>;
+  const results = Array.isArray(payload.results) ? payload.results : [];
+  return {
+    async searchLane(input: { event_slug: string; lane: "A" | "B" | "C" | "D"; query: string }) {
+      const mapped = results
+        .map((result) => {
+          if (!result || typeof result !== "object") {
+            return null;
+          }
+          const record = result as Record<string, unknown>;
+          const title = typeof record.title === "string" ? record.title : null;
+          const url = typeof record.url === "string" ? record.url : null;
+          if (!title || !url) {
+            return null;
+          }
+          const domain =
+            typeof record.domain === "string"
+              ? record.domain
+              : parseDomain(url);
+          if (!domain) {
+            return null;
+          }
+          const rawContent =
+            typeof record.raw_content === "string"
+              ? record.raw_content
+              : typeof record.content === "string"
+                ? record.content
+                : null;
+          return {
+            title,
+            url,
+            domain,
+            published_at:
+              typeof record.published_at === "string"
+                ? record.published_at
+                : typeof record.published_date === "string"
+                  ? record.published_date
+                  : undefined,
+            raw_content: rawContent
+          };
+        })
+        .filter((item): item is TavilySearchResult => item !== null);
+      return {
+        lane: input.lane,
+        query: input.query,
+        results: mapped,
+        cache_hit: false,
+        rate_limited: false,
+        latency_ms: 0
+      };
     }
-    if (input.includes("/markets")) {
-      return createMockResponse({ status: 200, payload: markets });
-    }
-    return createMockResponse({ status: 404, payload: { message: "Not found" } });
   };
-  return createGammaProvider({
-    fetch,
-    retries: 0,
-    sleep: async () => { },
-    now: () => 0
+}
+
+const LIVE_TAVILY_MAX_RESULTS = 8;
+
+const LIVE_TAVILY_CONFIG = {
+  lanes: {
+    A_update: { max_results: LIVE_TAVILY_MAX_RESULTS },
+    B_primary: { max_results: LIVE_TAVILY_MAX_RESULTS },
+    C_counter: { max_results: LIVE_TAVILY_MAX_RESULTS },
+    D_chatter: { max_results: 5 }
+  }
+};
+
+function createLiveTavilyProvider() {
+  const base = loadTavilyConfig();
+  return createTavilyProvider({
+    config: {
+      api_key: base.api_key,
+      ...LIVE_TAVILY_CONFIG
+    }
   });
+}
+
+function createGammaFixtureProvider() {
+  const marketTemplate: GammaMarket = {
+    market_id: "mkt_shutdown_single",
+    question: "Will there be another U.S. government shutdown by January 31?",
+    outcomes: ["Yes", "No"],
+    outcomePrices: [0.48, 0.52],
+    clobTokenIds: ["token_shutdown_yes", "token_shutdown_no"],
+    volume: 120000,
+    liquidity: 45000
+  };
+
+  return {
+    async getEventBySlug(slug: string): Promise<MarketContext> {
+      return {
+        event_id: "evt_shutdown_single",
+        slug,
+        title: "Will there be another U.S. government shutdown by January 31?",
+        description:
+          "Resolves to Yes if there is another U.S. government shutdown by January 31; otherwise No.",
+        resolution_rules_raw:
+          "Resolves Yes if a U.S. government shutdown occurs by January 31; otherwise No.",
+        end_time: "2026-01-31T00:00:00Z",
+        category: "politics",
+        markets: [marketTemplate],
+        primary_market_id: marketTemplate.market_id,
+        outcomePrices: marketTemplate.outcomePrices,
+        clobTokenIds: marketTemplate.clobTokenIds
+      };
+    }
+  };
 }
 
 function createClobFixtureProvider() {
@@ -114,11 +231,17 @@ function createStepClock(stepMs = 5) {
 
 function resolveDefaultStopStep(): string {
   const ids = buildPublishPipelineSteps().map((step) => step.id);
-  if (ids.includes("report.validate")) {
-    return "report.validate";
+  if (ids.includes("telegram.publish")) {
+    return "telegram.publish";
+  }
+  if (ids.includes("persist")) {
+    return "persist";
   }
   if (ids.includes("telegram.render")) {
     return "telegram.render";
+  }
+  if (ids.includes("report.validate")) {
+    return "report.validate";
   }
   return "report.generate";
 }
@@ -152,19 +275,19 @@ function buildMockReport(input: { context: { title: string; url: string; resolut
     },
     disagreement_map: {
       pro: [
-      {
-        claim: "Evidence limited; awaiting official update.",
-        source_type: "市场行为",
-        url: input.context.url,
-        time: "N/A"
-      },
-      {
-        claim: "Market pricing partially reflects expectations.",
-        source_type: "市场行为",
-        url: "https://official.example.com/statement",
-        time: "N/A"
-      }
-    ],
+        {
+          claim: "Evidence limited; awaiting official update.",
+          source_type: "市场行为",
+          url: input.context.url,
+          time: "N/A"
+        },
+        {
+          claim: "Market pricing partially reflects expectations.",
+          source_type: "市场行为",
+          url: "https://official.example.com/statement",
+          time: "N/A"
+        }
+      ],
       con: [
         {
           claim: "Counterpoint based on media interpretation.",
@@ -426,10 +549,98 @@ function writeSummaryFile(path: string, payload: unknown) {
   writeFileSync(path, `${JSON.stringify(payload, null, 2)}\n`, "utf-8");
 }
 
+function writePreviewFile(path: string, payload: { meta: Record<string, unknown>; text: string }) {
+  const dir = dirname(path);
+  if (dir && dir !== ".") {
+    mkdirSync(dir, { recursive: true });
+  }
+  const header = `<!-- e2e preview meta: ${JSON.stringify(payload.meta)} -->\n\n`;
+  writeFileSync(path, `${header}${payload.text}\n`, "utf-8");
+}
+
+function createPreviewPublisher(params: {
+  previewPath: string;
+  meta: { request_id: string; run_id: string; event_slug: string; mode: string };
+}) {
+  return {
+    async publishToChannel(text: string) {
+      writePreviewFile(params.previewPath, {
+        meta: { ...params.meta, generated_at: new Date().toISOString() },
+        text
+      });
+      return { message_id: `preview_${params.meta.run_id}` };
+    }
+  };
+}
+
+function createMemoryStorageAdapter() {
+  const events: EventRecord[] = [];
+  const evidence: EvidenceRecord[] = [];
+  const reports: ReportRecord[] = [];
+  const publishUpdates: ReportPublishUpdate[] = [];
+  const statusUpdates: ReportStatusUpdate[] = [];
+
+  const storage: StorageAdapter = {
+    upsertEvent: (record) => {
+      const index = events.findIndex((item) => item.slug === record.slug);
+      if (index >= 0) {
+        events[index] = record;
+      } else {
+        events.push(record);
+      }
+    },
+    appendEvidence: (records) => {
+      evidence.push(...records);
+    },
+    saveReport: (record) => {
+      reports.push(record);
+    },
+    getLatestReport: (slug) => {
+      const matches = reports.filter((report) => report.slug === slug);
+      if (matches.length === 0) {
+        return null;
+      }
+      const latest = matches[matches.length - 1];
+      const status: ReportStatusRecord = {
+        report_id: latest.report_id,
+        slug: latest.slug,
+        generated_at: latest.generated_at,
+        status: latest.status,
+        validator_code: latest.validator_code ?? null,
+        validator_message: latest.validator_message ?? null
+      };
+      return status;
+    },
+    updateReportPublish: (update) => {
+      publishUpdates.push(update);
+      const report = reports.find((item) => item.report_id === update.report_id);
+      if (report) {
+        report.status = update.status;
+        report.tg_message_id = update.tg_message_id;
+      }
+    },
+    updateReportStatus: (update) => {
+      statusUpdates.push(update);
+      const report = reports.find((item) => item.report_id === update.report_id);
+      if (report) {
+        report.status = update.status;
+        report.validator_code = update.validator_code ?? null;
+        report.validator_message = update.validator_message ?? null;
+      }
+    },
+    runInTransaction: (task) => task(),
+    close: () => {
+      // no-op for memory adapter
+    }
+  };
+
+  return { storage, events, evidence, reports, publishUpdates, statusUpdates };
+}
+
 describeE2E("publish pipeline e2e", () => {
   const defaultUrl =
     process.env.E2E_EVENT_URL ??
-    "https://polymarket.com/event/who-will-trump-nominate-as-fed-chair";
+    "https://polymarket.com/event/will-there-be-another-us-government-shutdown-by-january-31";
   const forceChatter = process.env.E2E_FORCE_D === "1";
   const liveDLaneUrl = process.env.E2E_EVENT_URL_D ?? "";
   const timeoutOverride = Number(process.env.E2E_TIMEOUT_MS);
@@ -474,23 +685,42 @@ describeE2E("publish pipeline e2e", () => {
       const useLive = process.env.TEST_LIVE === "1";
       const useLiveLlm = process.env.E2E_LLM_LIVE === "1";
       const stopStepId = process.env.E2E_STOP_STEP ?? resolveDefaultStopStep();
+      const previewPath =
+        process.env.E2E_TG_PREVIEW_PATH ?? "tests/e2e/tmp/tg-preview.md";
       const topMarkets =
         process.env.E2E_TOP_MARKETS && Number.isFinite(Number(process.env.E2E_TOP_MARKETS))
           ? Number(process.env.E2E_TOP_MARKETS)
           : 3;
+      const { storage, publishUpdates } = createMemoryStorageAdapter();
       try {
+        const tavilyConfigOverride = forceChatter
+          ? {
+            ...LIVE_TAVILY_CONFIG,
+            lanes: {
+              ...LIVE_TAVILY_CONFIG.lanes,
+              D_chatter: {
+                ...LIVE_TAVILY_CONFIG.lanes.D_chatter,
+                enabled: "always"
+              }
+            }
+          }
+          : LIVE_TAVILY_CONFIG;
         const stepOptions: PipelineStepOptions = useLive
           ? {
             gammaProvider: createGammaProvider(),
             clobProvider: createClobProvider(),
             pricingProvider: createPricingProvider(),
-            marketSignalsTopMarkets: topMarkets
+            marketSignalsTopMarkets: topMarkets,
+            tavilyProvider: createLiveTavilyProvider(),
+            tavilyConfig: tavilyConfigOverride
           }
           : {
             gammaProvider: createGammaFixtureProvider(),
             clobProvider: createClobFixtureProvider(),
             pricingProvider: createPricingFixtureProvider(),
-            marketSignalsTopMarkets: topMarkets
+            marketSignalsTopMarkets: topMarkets,
+            tavilyProvider: createTavilyFixtureProvider(),
+            tavilyConfig: tavilyConfigOverride
           };
         stepOptions.llmProvider = useLiveLlm
           ? createLLMProvider()
@@ -499,15 +729,17 @@ describeE2E("publish pipeline e2e", () => {
               return buildMockReport(input);
             }
           };
-        if (forceChatter) {
-          stepOptions.tavilyConfig = {
-            lanes: {
-              D_chatter: {
-                enabled: "always"
-              }
-            }
-          };
-        }
+        stepOptions.publishConfig = { strategy: "auto" };
+        stepOptions.storage = storage;
+        stepOptions.telegramPublisher = createPreviewPublisher({
+          previewPath,
+          meta: {
+            request_id: "req_e2e",
+            run_id: "run_e2e",
+            event_slug: slug,
+            mode: useLive ? "live" : "fake"
+          }
+        });
         const context = await runPublishPipelineSteps(
           {
             request_id: "req_e2e",
@@ -554,7 +786,11 @@ describeE2E("publish pipeline e2e", () => {
           expect(entry.run_id).toBe("run_e2e");
           expect(entry.event_slug).toBe(slug);
           expect(entry.input_keys.length).toBeGreaterThan(0);
-          expect(entry.output_keys.length).toBeGreaterThan(0);
+          if (entry.output_keys.length === 0) {
+            expect(entry.step_id).toBe("persist");
+          } else {
+            expect(entry.output_keys.length).toBeGreaterThan(0);
+          }
           expect(entry.latency_ms).toBeGreaterThanOrEqual(0);
         }
         const summaryPayload = {
@@ -564,7 +800,8 @@ describeE2E("publish pipeline e2e", () => {
             event_slug: slug,
             mode: useLive ? "live" : "fake",
             stop_step: stopStepId,
-            generated_at: new Date().toISOString()
+            generated_at: new Date().toISOString(),
+            tg_preview_path: previewPath
           },
           steps: stepSummaries
         };
@@ -576,6 +813,17 @@ describeE2E("publish pipeline e2e", () => {
         }
         for (const summary of stepSummaries) {
           console.info("[e2e][step]", summary.step_id, summary.result);
+        }
+        const published = logs.some(
+          (entry) => entry.step_id === "telegram.publish" && !entry.error_code
+        );
+        if (published && context.tg_post_text) {
+          const previewFile = readFileSync(previewPath, "utf-8");
+          expect(previewFile.includes(context.tg_post_text)).toBe(true);
+        }
+        if (published && publishUpdates.length > 0) {
+          expect(publishUpdates[0]?.status).toBe("published");
+          expect(publishUpdates[0]?.tg_message_id).toContain("preview_");
         }
       } finally {
         warnSpy.mockRestore();
@@ -601,10 +849,14 @@ describeE2E("publish pipeline e2e", () => {
       const clock = createStepClock();
       const useLiveLlm = process.env.E2E_LLM_LIVE === "1";
       const stopStepId = process.env.E2E_STOP_STEP_D ?? resolveDefaultStopStep();
+      const previewPath =
+        process.env.E2E_TG_PREVIEW_PATH_D ??
+        "tests/e2e/tmp/tg-preview-dlane.md";
       const topMarkets =
         process.env.E2E_TOP_MARKETS && Number.isFinite(Number(process.env.E2E_TOP_MARKETS))
           ? Number(process.env.E2E_TOP_MARKETS)
           : 3;
+      const { storage } = createMemoryStorageAdapter();
 
       const context = await runPublishPipelineSteps(
         {
@@ -624,13 +876,26 @@ describeE2E("publish pipeline e2e", () => {
             clobProvider: createClobProvider(),
             pricingProvider: createPricingProvider(),
             marketSignalsTopMarkets: topMarkets,
+            tavilyProvider: createLiveTavilyProvider(),
+            tavilyConfig: LIVE_TAVILY_CONFIG,
             llmProvider: useLiveLlm
               ? createLLMProvider()
               : {
                 async generateReportV1(input) {
                   return buildMockReport(input);
                 }
+              },
+            publishConfig: { strategy: "auto" },
+            storage,
+            telegramPublisher: createPreviewPublisher({
+              previewPath,
+              meta: {
+                request_id: "req_e2e_d",
+                run_id: "run_e2e_d",
+                event_slug: slug,
+                mode: "live"
               }
+            })
           }
         }
       );
@@ -652,7 +917,8 @@ describeE2E("publish pipeline e2e", () => {
           event_slug: slug,
           mode: "live",
           stop_step: stopStepId,
-          generated_at: new Date().toISOString()
+          generated_at: new Date().toISOString(),
+          tg_preview_path: previewPath
         },
         steps: stepSummaries
       };
@@ -662,6 +928,13 @@ describeE2E("publish pipeline e2e", () => {
       writeSummaryFile(summaryPath, summaryPayload);
       for (const summary of stepSummaries) {
         console.info("[e2e][step][D]", summary.step_id, summary.result);
+      }
+      const published = logs.some(
+        (entry) => entry.step_id === "telegram.publish" && !entry.error_code
+      );
+      if (published && context.tg_post_text) {
+        const previewFile = readFileSync(previewPath, "utf-8");
+        expect(previewFile.includes(context.tg_post_text)).toBe(true);
       }
     },
     testTimeoutMs
