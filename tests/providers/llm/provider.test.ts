@@ -20,6 +20,12 @@ const baseInput: LlmReportInput = {
   },
   evidence: { tavily_results: [] },
   clob: null,
+  market_metrics_summary: {
+    availability: "unavailable",
+    reason: "price_context_missing; clob_snapshot_missing",
+    price_signals: null,
+    clob_metrics: null
+  },
   config: { aiProbabilityScale: "0-100" }
 };
 

@@ -16,6 +16,7 @@ import type {
   LLMProvider,
   LlmMarketContext,
   LlmReportInput,
+  MarketMetricsSummary,
   ReportV1Json
 } from "../../providers/llm/types.js";
 
@@ -143,6 +144,131 @@ function resolvePriceContext(
     }
   }
   return signals[0]?.price_context ?? null;
+}
+
+function hasSignalValues(signals: PriceContext["signals"]): boolean {
+  return Object.values(signals).some(
+    (value) => value !== null && value !== undefined
+  );
+}
+
+function buildPriceSignalsSummary(priceContext: PriceContext | null): {
+  latest_price: number | null;
+  midpoint_price: number | null;
+  change_1h: number | null;
+  change_4h: number | null;
+  change_24h: number | null;
+  volatility_24h: number | null;
+  range_high_24h: number | null;
+  range_low_24h: number | null;
+  trend_slope_24h: number | null;
+  spike_flag: boolean | null;
+} | null {
+  if (!priceContext) {
+    return null;
+  }
+  const hasSignals = hasSignalValues(priceContext.signals);
+  const hasPrices =
+    priceContext.latest_price !== null || priceContext.midpoint_price !== null;
+  if (!hasSignals && !hasPrices) {
+    return null;
+  }
+  return {
+    latest_price: priceContext.latest_price,
+    midpoint_price: priceContext.midpoint_price,
+    change_1h: priceContext.signals.change_1h,
+    change_4h: priceContext.signals.change_4h,
+    change_24h: priceContext.signals.change_24h,
+    volatility_24h: priceContext.signals.volatility_24h,
+    range_high_24h: priceContext.signals.range_high_24h,
+    range_low_24h: priceContext.signals.range_low_24h,
+    trend_slope_24h: priceContext.signals.trend_slope_24h,
+    spike_flag: priceContext.signals.spike_flag
+  };
+}
+
+function buildClobMetricsSummary(snapshot?: ClobSnapshot): {
+  spread: number | null;
+  midpoint: number | null;
+  price_change_24h: number | null;
+  notable_walls_count: number;
+  top_wall: {
+    side: "bid" | "ask";
+    price: number;
+    size: number;
+    multiple: number;
+  } | null;
+} | null {
+  if (!snapshot) {
+    return null;
+  }
+  const notableWalls = snapshot.notable_walls ?? [];
+  const notableCount = notableWalls.length;
+  const topWall =
+    notableCount > 0
+      ? notableWalls.reduce((current, candidate) =>
+          candidate.multiple > current.multiple ? candidate : current
+        )
+      : null;
+  const hasMetrics =
+    snapshot.spread !== null ||
+    snapshot.midpoint !== null ||
+    snapshot.price_change_24h !== null ||
+    notableCount > 0;
+  if (!hasMetrics) {
+    return null;
+  }
+  return {
+    spread: snapshot.spread ?? null,
+    midpoint: snapshot.midpoint ?? null,
+    price_change_24h: snapshot.price_change_24h ?? null,
+    notable_walls_count: notableCount,
+    top_wall: topWall
+      ? {
+          side: topWall.side,
+          price: topWall.price,
+          size: topWall.size,
+          multiple: topWall.multiple
+        }
+      : null
+  };
+}
+
+function buildMarketMetricsSummary(
+  input: ReportGenerateInput
+): MarketMetricsSummary {
+  const priceContext = resolvePriceContext(input.market_context, input.market_signals);
+  const priceSignals = buildPriceSignalsSummary(priceContext);
+  const clobMetrics = buildClobMetricsSummary(input.clob_snapshot);
+  const reasons: string[] = [];
+
+  if (!priceSignals) {
+    if (!priceContext) {
+      reasons.push("price_context_missing");
+    } else if (!hasSignalValues(priceContext.signals)) {
+      reasons.push("price_signals_unavailable");
+    } else {
+      reasons.push("price_signals_empty");
+    }
+  }
+  if (priceContext?.history_warning) {
+    reasons.push(
+      `${priceContext.history_warning.code}: ${priceContext.history_warning.message}`
+    );
+  }
+  if (!clobMetrics) {
+    reasons.push("clob_snapshot_missing");
+  }
+
+  const availability =
+    priceSignals || clobMetrics ? "available" : "unavailable";
+
+  return {
+    availability,
+    reason: reasons.length > 0 ? reasons.join("; ") : undefined,
+    price_signals: priceSignals,
+    clob_metrics: clobMetrics
+  };
 }
 
 function normalizeClobSnapshot(snapshot?: ClobSnapshot): ClobSnapshot {
@@ -280,10 +406,12 @@ export async function generateReport(
   const provider = options.provider ?? createLLMProvider();
   const context = buildMarketContextInput(input);
   const evidence = buildEvidenceDigest(input.tavily_results);
+  const marketMetricsSummary = buildMarketMetricsSummary(input);
   const llmInput: LlmReportInput = {
     context,
     evidence,
     clob: normalizeClobSnapshot(input.clob_snapshot),
+    market_metrics_summary: marketMetricsSummary,
     config: { aiProbabilityScale: "0-100" }
   };
 

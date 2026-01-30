@@ -159,6 +159,29 @@ describe("report.generate step", () => {
       notable_walls: [],
       price_change_24h: 0.05
     });
+    expect(input.market_metrics_summary).toEqual({
+      availability: "available",
+      reason: undefined,
+      price_signals: {
+        latest_price: 0.61,
+        midpoint_price: 0.6,
+        change_1h: null,
+        change_4h: null,
+        change_24h: null,
+        volatility_24h: null,
+        range_high_24h: null,
+        range_low_24h: null,
+        trend_slope_24h: null,
+        spike_flag: null
+      },
+      clob_metrics: {
+        spread: 0.02,
+        midpoint: 0.6,
+        price_change_24h: 0.05,
+        notable_walls_count: 0,
+        top_wall: null
+      }
+    });
 
     const lanes = input.evidence.tavily_results.map((lane) => lane.lane);
     expect(lanes).toEqual(["A", "B"]);
@@ -220,5 +243,46 @@ describe("report.generate step", () => {
       const appError = error as AppError;
       expect(appError.code).toBe(ERROR_CODES.STEP_REPORT_GENERATE_MISSING_INPUT);
     }
+  });
+
+  it("marks market metrics summary unavailable when inputs missing", async () => {
+    const captured: LlmReportInput[] = [];
+    const provider: LLMProvider = {
+      async generateReportV1(input: LlmReportInput): Promise<ReportV1Json> {
+        captured.push(input);
+        return { ok: true };
+      }
+    };
+
+    const marketContext: MarketContext = {
+      event_id: "event_4",
+      slug: "test-event-4",
+      title: "Test Event 4",
+      resolution_rules_raw: "Rules",
+      markets: []
+    };
+
+    await generateReport(
+      {
+        request_id: "req-4",
+        run_id: "run-4",
+        event_slug: marketContext.slug,
+        market_context: marketContext,
+        tavily_results: []
+      },
+      { provider }
+    );
+
+    expect(captured).toHaveLength(1);
+    const [input] = captured;
+    if (!input) {
+      throw new Error("Missing captured input");
+    }
+    expect(input.market_metrics_summary).toEqual({
+      availability: "unavailable",
+      reason: "price_context_missing; clob_snapshot_missing",
+      price_signals: null,
+      clob_metrics: null
+    });
   });
 });

@@ -21,17 +21,23 @@ SYSTEM:
 10) ai_vs_market 必须包含 {market_yes, ai_yes_beta, delta, drivers}：
    - market_yes 与 context.market_odds.yes 同口径（0-100）
    - drivers 为 1-3 条“差值驱动证据”，不得包含下注/资金管理建议措辞
-11) limitations.not_included 必须包含 no_bet_advice 与 no_position_sizing（固定免责声明）。
+11) disagreement_map 中必须至少包含 1 条 source_type="市场行为" 的 evidenceItem：
+   - 指标可用时，claim 必须引用 market_metrics_summary 的数值指标（如 24h 变化、spread、墙）。
+   - 若 market_metrics_summary.availability="unavailable"，可选择跳过该 evidence，或用 claim 说明“指标不可用原因”，不得虚构数值。
+12) limitations.not_included 必须包含 no_bet_advice 与 no_position_sizing（固定免责声明）。
 
 USER:
 给定以下输入数据：
 - market_context: {title, url, resolution_rules_raw, end_time, market_odds_yes, market_odds_no, liquidity_proxy, price_context}
 - clob_snapshot: {book_top_levels, spread, midpoint, notable_walls, price_change_24h}
+- market_metrics_summary: {availability, reason, price_signals, clob_metrics}
 - tavily_results: 一个数组，每个元素包含 {lane, query, results:[{title,url,domain,published_at,raw_content}]}
 
 其中 price_context 结构为：
 {token_id, latest_price, midpoint_price, history_24h[{ts,price}], signals{change_1h, change_4h, change_24h, volatility_24h, range_high_24h, range_low_24h, trend_slope_24h, spike_flag}}
 若 history_24h 点位不足，signals 各字段可能为空。
+market_metrics_summary 为代码侧派生指标摘要（与 price_context/clob_snapshot 一致），
+若 availability="unavailable" 则必须参考 reason，禁止编造数值。
 
 请基于这些数据，生成符合 ReportV1 schema 的 JSON 报告。
 

@@ -46,7 +46,8 @@ function buildPromptInput(input: LlmReportInput): LlmPromptInput {
   return {
     market_context: input.context,
     clob_snapshot: input.clob ?? null,
-    tavily_results: input.evidence.tavily_results
+    tavily_results: input.evidence.tavily_results,
+    market_metrics_summary: input.market_metrics_summary
   };
 }
 
