@@ -50,10 +50,14 @@ describe("createTavilyProvider", () => {
 
     expect(result.cache_hit).toBe(false);
     expect(result.rate_limited).toBe(false);
-    expect(result.results).toHaveLength(2);
+    expect(result.results).toHaveLength(3);
     expect(result.results[0]?.domain).toBe("example.com");
-    expect(result.results[0]?.raw_content).toBe("Raw content A");
-    expect(result.results[1]?.raw_content).toBe("Fallback content");
+    expect(result.results[0]?.raw_content).toBe(
+      "U.S. government shutdown update with official details."
+    );
+    expect(result.results[1]?.raw_content).toBe(
+      "Latest coverage on government shutdown discussions."
+    );
   });
 
   it("returns empty results when tavily response is empty", async () => {
@@ -123,8 +127,10 @@ describe("createTavilyProvider", () => {
       query: "chatter query"
     });
 
-    expect(first.results).toHaveLength(2);
-    expect(first.results[0]?.raw_content).toBe("Raw content A");
+    expect(first.results).toHaveLength(3);
+    expect(first.results[0]?.raw_content).toBe(
+      "U.S. government shutdown update with official details."
+    );
     expect(calls).toBe(1);
     expect(first.cache_hit).toBe(false);
     expect(second.cache_hit).toBe(true);

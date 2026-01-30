@@ -2,7 +2,7 @@
 市场 Yes/No：{context.market_odds.yes}% / {context.market_odds.no}%
 AI Yes(Beta)：{ai_vs_market.ai_yes_beta}%（Δ {ai_vs_market.delta}%）
 剩余时间：{context.time_remaining}
-市场链接：{context.url}
+市场链接：{context.citation}
 
 【0 结算条件（原文）】
 {context.resolution_rules_raw}
@@ -13,12 +13,12 @@ AI Yes(Beta)：{ai_vs_market.ai_yes_beta}%（Δ {ai_vs_market.delta}%）
 
 【2 主要分歧点】
 支持（Pro）
-- {disagreement_map.pro[0].claim}（{disagreement_map.pro[0].source_type}）{disagreement_map.pro[0].url}
-- {disagreement_map.pro[1].claim}（{disagreement_map.pro[1].source_type}）{disagreement_map.pro[1].url}
+- {disagreement_map.pro[0].claim}（{disagreement_map.pro[0].source_type}）{disagreement_map.pro[0].citation}
+- {disagreement_map.pro[1].claim}（{disagreement_map.pro[1].source_type}）{disagreement_map.pro[1].citation}
 
 反对（Con）
-- {disagreement_map.con[0].claim}（{disagreement_map.con[0].source_type}）{disagreement_map.con[0].url}
-- {disagreement_map.con[1].claim}（{disagreement_map.con[1].source_type}）{disagreement_map.con[1].url}
+- {disagreement_map.con[0].claim}（{disagreement_map.con[0].source_type}）{disagreement_map.con[0].citation}
+- {disagreement_map.con[1].claim}（{disagreement_map.con[1].source_type}）{disagreement_map.con[1].citation}
 
 【3 已定价 vs 新增】
 已定价：
@@ -32,7 +32,7 @@ AI Yes(Beta)：{ai_vs_market.ai_yes_beta}%（Δ {ai_vs_market.delta}%）
 【4 情绪 vs 赔率（抽样）】
 - 情绪：{sentiment.bias}；关系：{sentiment.relation}
 - 抽样来源：
-  - {sentiment.samples[0].summary} {sentiment.samples[0].url}
+  - {sentiment.samples[0].summary} {sentiment.samples[0].citation}
 
 【5 关键变量】
 - 变量：{key_variables[0].name}
@@ -55,5 +55,8 @@ AI Yes(Beta)：{ai_vs_market.ai_yes_beta}%（Δ {ai_vs_market.delta}%）
 【9 差值驱动（≤3 条）】
 - {ai_vs_market.drivers[0]}
 - {ai_vs_market.drivers[1]}
+
+【Sources】
+{sources}
 
 免责声明：AI 概率为基于当前证据集的估计，可能滞后或偏差；不构成任何投资/下注建议。

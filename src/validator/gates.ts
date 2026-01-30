@@ -46,6 +46,8 @@ const DEFAULT_GATE_CONFIG = {
   minFailureSignalLength: 20,
   minDistinctUrls: 3,
   minDistinctDomains: 2,
+  minEvidenceDomains: 2,
+  minEvidenceSnippetRatio: 0.7,
   callToActionKeywords: DEFAULT_CALL_TO_ACTION_KEYWORDS
 } as const;
 
@@ -53,6 +55,8 @@ type GateConfigInput = Partial<{
   minFailureSignalLength: number;
   minDistinctUrls: number;
   minDistinctDomains: number;
+  minEvidenceDomains: number;
+  minEvidenceSnippetRatio: number;
   callToActionKeywords: string[];
 }>;
 
@@ -70,13 +74,20 @@ export type ContentGateConfig = {
   minFailureSignalLength: number;
   minDistinctUrls: number;
   minDistinctDomains: number;
+  minEvidenceDomains: number;
+  minEvidenceSnippetRatio: number;
   callToActionKeywords: string[];
 };
 
 type EvidenceItem = {
   claim: string;
+  claim_summary: string;
   source_type: string;
   url: string;
+  domain: string;
+  title: string;
+  published_at: string;
+  snippet: string;
   time: string;
 };
 
@@ -143,6 +154,10 @@ function normalizeConfig(input?: GateConfigInput): ContentGateConfig {
     minDistinctUrls: input?.minDistinctUrls ?? DEFAULT_GATE_CONFIG.minDistinctUrls,
     minDistinctDomains:
       input?.minDistinctDomains ?? DEFAULT_GATE_CONFIG.minDistinctDomains,
+    minEvidenceDomains:
+      input?.minEvidenceDomains ?? DEFAULT_GATE_CONFIG.minEvidenceDomains,
+    minEvidenceSnippetRatio:
+      input?.minEvidenceSnippetRatio ?? DEFAULT_GATE_CONFIG.minEvidenceSnippetRatio,
     callToActionKeywords:
       input?.callToActionKeywords ?? DEFAULT_GATE_CONFIG.callToActionKeywords
   };
@@ -391,6 +406,47 @@ export function validateContentGates(
       },
       suggestion: suggestionForEvidence("补充不同域名来源")
     };
+  }
+
+  const evidenceItems = [
+    ...report.disagreement_map.pro,
+    ...report.disagreement_map.con
+  ];
+  const evidenceDomainSet = new Set(
+    evidenceItems.map((item) => normalizeDomain(item.domain))
+  );
+  if (evidenceDomainSet.size < config.minEvidenceDomains) {
+    return {
+      ok: false,
+      code: ERROR_CODES.VALIDATOR_EVIDENCE_DOMAIN_INSUFFICIENT,
+      message: "insufficient evidence domain diversity",
+      details: {
+        distinct_domains: evidenceDomainSet.size,
+        min_required: config.minEvidenceDomains
+      },
+      suggestion: suggestionForEvidence("补充不同域名来源")
+    };
+  }
+
+  if (evidenceItems.length > 0) {
+    const snippetCount = evidenceItems.filter(
+      (item) => item.snippet?.trim().length > 0
+    ).length;
+    const ratio = snippetCount / evidenceItems.length;
+    if (ratio < config.minEvidenceSnippetRatio) {
+      return {
+        ok: false,
+        code: ERROR_CODES.VALIDATOR_EVIDENCE_SNIPPET_INSUFFICIENT,
+        message: "insufficient evidence snippet coverage",
+        details: {
+          ratio,
+          min_required: config.minEvidenceSnippetRatio,
+          total: evidenceItems.length,
+          with_snippet: snippetCount
+        },
+        suggestion: suggestionForEvidence("补充包含摘要的证据")
+      };
+    }
   }
 
   const callToActionMatchers = buildCallToActionMatchers(

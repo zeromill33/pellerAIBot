@@ -23,28 +23,48 @@ const validReport = {
     pro: [
       {
         claim: "Evidence is limited; awaiting official update.",
+        claim_summary: "Evidence is limited; awaiting official update.",
         source_type: "市场行为",
         url: "https://polymarket.com/event/test",
+        domain: "polymarket.com",
+        title: "Test market",
+        published_at: "2026-01-28T00:00:00Z",
+        snippet: "Evidence is limited; awaiting official update.",
         time: "N/A"
       },
       {
         claim: "Market pricing partially reflects expectations.",
+        claim_summary: "Market pricing partially reflects expectations.",
         source_type: "市场行为",
         url: "https://official.example.com/statement",
+        domain: "official.example.com",
+        title: "Official statement",
+        published_at: "2026-01-03T00:00:00Z",
+        snippet: "Market pricing partially reflects expectations.",
         time: "2026-01-03T00:00:00Z"
       }
     ],
     con: [
       {
         claim: "Counterpoint based on media interpretation.",
+        claim_summary: "Counterpoint based on media interpretation.",
         source_type: "主流媒体",
         url: "https://news.example.com/1",
+        domain: "news.example.com",
+        title: "Media interpretation",
+        published_at: "2026-01-01T00:00:00Z",
+        snippet: "Counterpoint based on media interpretation.",
         time: "2026-01-01T00:00:00Z"
       },
       {
         claim: "Social chatter highlights uncertainty.",
+        claim_summary: "Social chatter highlights uncertainty.",
         source_type: "社交讨论",
         url: "https://social.example.com/1",
+        domain: "social.example.com",
+        title: "Social chatter",
+        published_at: "2026-01-02T00:00:00Z",
+        snippet: "Social chatter highlights uncertainty.",
         time: "2026-01-02T00:00:00Z"
       }
     ]

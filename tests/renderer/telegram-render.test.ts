@@ -27,28 +27,48 @@ function buildReport(overrides?: Partial<ReportV1Json>): ReportV1Json {
       pro: [
         {
           claim: "支持观点 1",
+          claim_summary: "支持观点 1",
           source_type: "主流媒体",
           url: "https://news.example.com/1",
+          domain: "news.example.com",
+          title: "新闻 1",
+          published_at: "2026-01-28T00:00:00Z",
+          snippet: "支持观点 1",
           time: "2026-01-28"
         },
         {
           claim: "支持观点 2",
+          claim_summary: "支持观点 2",
           source_type: "官方公告",
           url: "https://news.example.com/2",
+          domain: "news.example.com",
+          title: "新闻 2",
+          published_at: "2026-01-27T00:00:00Z",
+          snippet: "支持观点 2",
           time: "2026-01-27"
         }
       ],
       con: [
         {
           claim: "反对观点 1",
+          claim_summary: "反对观点 1",
           source_type: "社交讨论",
           url: "https://social.example.com/1",
+          domain: "social.example.com",
+          title: "社交 1",
+          published_at: "2026-01-26T00:00:00Z",
+          snippet: "反对观点 1",
           time: "2026-01-26"
         },
         {
           claim: "反对观点 2",
+          claim_summary: "反对观点 2",
           source_type: "主流媒体",
           url: "https://news.example.com/3",
+          domain: "news.example.com",
+          title: "新闻 3",
+          published_at: "2026-01-25T00:00:00Z",
+          snippet: "反对观点 2",
           time: "2026-01-25"
         }
       ]
@@ -126,7 +146,7 @@ describe("renderTelegramReport", () => {
     });
     const text = renderTelegramReport(report, { parseMode: "MarkdownV2" });
     expect(text).toContain("测试标题 \\[含特殊\\*字符\\]");
-    expect(text).toContain("https://polymarket.com/event/test-market");
+    expect(text).toContain("polymarket");
   });
 
   it("splits long output by section boundaries when maxLength is set", () => {

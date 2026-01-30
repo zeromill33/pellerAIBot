@@ -200,14 +200,29 @@
     "evidenceItem": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["claim", "source_type", "url", "time"],
+      "required": [
+        "claim",
+        "claim_summary",
+        "source_type",
+        "url",
+        "domain",
+        "title",
+        "published_at",
+        "snippet",
+        "time"
+      ],
       "properties": {
         "claim": { "type": "string", "minLength": 1 },
+        "claim_summary": { "type": "string", "minLength": 1, "maxLength": 280 },
         "source_type": {
           "type": "string",
           "enum": ["官方公告", "主流媒体", "社交讨论", "链上数据", "市场行为"]
         },
         "url": { "type": "string", "minLength": 1 },
+        "domain": { "type": "string", "minLength": 1 },
+        "title": { "type": "string", "minLength": 1 },
+        "published_at": { "type": "string", "minLength": 1 },
+        "snippet": { "type": "string", "minLength": 1, "maxLength": 280 },
         "time": { "type": "string", "minLength": 1 }
       }
     },

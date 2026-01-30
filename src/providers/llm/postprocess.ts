@@ -76,6 +76,12 @@ function expectNonEmptyString(value: unknown, path: string): string {
   return value;
 }
 
+function assertMaxLength(value: string, max: number, path: string) {
+  if (value.length > max) {
+    invalid("String exceeds maximum length", { path, max, length: value.length });
+  }
+}
+
 function assertNoCallToAction(text: string, path: string) {
   for (const pattern of CALL_TO_ACTION_PATTERNS) {
     if (pattern.test(text)) {
@@ -199,8 +205,24 @@ function validateDisagreement(report: ReportObject) {
   [...pro, ...con].forEach((item, index) => {
     const entry = expectObject(item, `disagreement_map.item[${index}]`);
     expectNonEmptyString(entry.claim, `disagreement_map.item[${index}].claim`);
+    const claimSummary = expectNonEmptyString(
+      entry.claim_summary,
+      `disagreement_map.item[${index}].claim_summary`
+    );
+    assertMaxLength(claimSummary, 280, `disagreement_map.item[${index}].claim_summary`);
     expectNonEmptyString(entry.source_type, `disagreement_map.item[${index}].source_type`);
     expectNonEmptyString(entry.url, `disagreement_map.item[${index}].url`);
+    expectNonEmptyString(entry.domain, `disagreement_map.item[${index}].domain`);
+    expectNonEmptyString(entry.title, `disagreement_map.item[${index}].title`);
+    expectNonEmptyString(
+      entry.published_at,
+      `disagreement_map.item[${index}].published_at`
+    );
+    const snippet = expectNonEmptyString(
+      entry.snippet,
+      `disagreement_map.item[${index}].snippet`
+    );
+    assertMaxLength(snippet, 280, `disagreement_map.item[${index}].snippet`);
     expectNonEmptyString(entry.time, `disagreement_map.item[${index}].time`);
   });
 }

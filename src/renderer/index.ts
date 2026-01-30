@@ -104,6 +104,87 @@ function cloneReport(report: ReportV1Json): TemplateData {
   return JSON.parse(JSON.stringify(report)) as TemplateData;
 }
 
+type CitationEntry = {
+  number: number;
+  url: string;
+  domain: string;
+  title: string;
+};
+
+function parseDomain(url: string): string {
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.trim().toLowerCase();
+    return host.startsWith("www.") ? host.slice(4) : host;
+  } catch {
+    return "unknown";
+  }
+}
+
+function truncateTitle(title: string, maxLength = 80): string {
+  if (title.length <= maxLength) {
+    return title;
+  }
+  return `${title.slice(0, maxLength).trim()}…`;
+}
+
+function buildCitations(report: TemplateData): {
+  citationMap: Map<string, number>;
+  sources: string;
+} {
+  const citationMap = new Map<string, number>();
+  const entries: CitationEntry[] = [];
+
+  const addCitation = (url?: string, title?: string, domain?: string) => {
+    if (!url) {
+      return;
+    }
+    const normalizedUrl = url.trim();
+    if (!normalizedUrl) {
+      return;
+    }
+    const existing = citationMap.get(normalizedUrl);
+    if (existing) {
+      return;
+    }
+    const entryDomain = domain?.trim() || parseDomain(normalizedUrl);
+    const entryTitle = truncateTitle(title?.trim() || "来源");
+    const number = entries.length + 1;
+    citationMap.set(normalizedUrl, number);
+    entries.push({ number, url: normalizedUrl, domain: entryDomain, title: entryTitle });
+  };
+
+  const context = (report.context ?? {}) as Record<string, unknown>;
+  addCitation(context.url as string | undefined, context.title as string | undefined);
+
+  const disagreement = report.disagreement_map as Record<string, unknown> | undefined;
+  const pro = (disagreement?.pro as Array<Record<string, unknown>> | undefined) ?? [];
+  const con = (disagreement?.con as Array<Record<string, unknown>> | undefined) ?? [];
+  [...pro, ...con].forEach((item) =>
+    addCitation(
+      item.url as string | undefined,
+      item.title as string | undefined,
+      item.domain as string | undefined
+    )
+  );
+
+  const sentiment = report.sentiment as Record<string, unknown> | undefined;
+  const samples = (sentiment?.samples as Array<Record<string, unknown>> | undefined) ?? [];
+  samples.forEach((sample) =>
+    addCitation(
+      sample.url as string | undefined,
+      sample.summary as string | undefined,
+      undefined
+    )
+  );
+
+  const sources = entries
+    .map((entry) => `【${entry.number}】${entry.domain} — ${entry.title} — ${entry.url}`)
+    .join("\n");
+
+  return { citationMap, sources };
+}
+
 function buildTemplateData(report: ReportV1Json): TemplateData {
   const data = cloneReport(report);
   const context = (data.context ?? {}) as Record<string, unknown>;
@@ -117,6 +198,30 @@ function buildTemplateData(report: ReportV1Json): TemplateData {
   if (Array.isArray(risk)) {
     data.risk_attribution = risk.map((item) => String(item)).join(" / ");
   }
+
+  const { citationMap, sources } = buildCitations(data);
+  data.sources = sources;
+  const contextCitation = context.url
+    ? citationMap.get(String(context.url))
+    : undefined;
+  context.citation = contextCitation ? `【${contextCitation}】` : "";
+
+  const disagreement = data.disagreement_map as Record<string, unknown> | undefined;
+  const pro = (disagreement?.pro as Array<Record<string, unknown>> | undefined) ?? [];
+  const con = (disagreement?.con as Array<Record<string, unknown>> | undefined) ?? [];
+  [...pro, ...con].forEach((item) => {
+    const url = item.url ? String(item.url) : "";
+    const number = citationMap.get(url);
+    item.citation = number ? `【${number}】` : "";
+  });
+
+  const sentiment = data.sentiment as Record<string, unknown> | undefined;
+  const samples = (sentiment?.samples as Array<Record<string, unknown>> | undefined) ?? [];
+  samples.forEach((sample) => {
+    const url = sample.url ? String(sample.url) : "";
+    const number = citationMap.get(url);
+    sample.citation = number ? `【${number}】` : "";
+  });
 
   return data;
 }
