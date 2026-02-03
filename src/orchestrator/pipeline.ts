@@ -280,7 +280,10 @@ async function runSupplementSearch(
       clob_snapshot: ctx.clob_snapshot,
       tavily_results: tavily_results_filtered,
       market_signals: ctx.market_signals,
-      liquidity_proxy: ctx.liquidity_proxy
+      liquidity_proxy: ctx.liquidity_proxy,
+      resolution_structured: ctx.resolution_structured,
+      official_sources: ctx.official_sources,
+      official_sources_error: ctx.official_sources_error
     },
     { provider: options.llmProvider }
   );
@@ -305,6 +308,8 @@ function toPipelineError(error: unknown, input: PublishPipelineInput): AppError 
   if (error instanceof AppError) {
     return error;
   }
+  const errorMessage = error instanceof Error ? error.message : String(error);
+  const errorName = error instanceof Error ? error.name : undefined;
   return createAppError({
     code: ERROR_CODES.ORCH_PIPELINE_FAILED,
     message: "Publish pipeline failed",
@@ -312,7 +317,9 @@ function toPipelineError(error: unknown, input: PublishPipelineInput): AppError 
     retryable: true,
     details: {
       event_slug: input.event_slug,
-      run_id: input.run_id
+      run_id: input.run_id,
+      error_message: errorMessage,
+      ...(errorName ? { error_name: errorName } : {})
     }
   });
 }

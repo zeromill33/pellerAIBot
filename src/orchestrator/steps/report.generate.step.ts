@@ -21,6 +21,7 @@ import type {
   MarketMetricsSummary,
   ReportV1Json
 } from "../../providers/llm/types.js";
+import { truncateText } from "../../utils/text.js";
 
 type ReportGenerateInput = {
   request_id: string;
@@ -55,6 +56,33 @@ const LANE_PRIORITY: Record<TavilyLane, number> = {
   C: 2,
   D: 3
 };
+const DEFAULT_MAX_RESULTS_PER_LANE = 8;
+const DEFAULT_MAX_RAW_CONTENT_CHARS = 1200;
+
+function parsePositiveInt(value: string | undefined): number | undefined {
+  if (!value) {
+    return undefined;
+  }
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return undefined;
+  }
+  return Math.floor(parsed);
+}
+
+function resolveMaxResultsPerLane(): number {
+  return (
+    parsePositiveInt(process.env.LLM_TAVILY_MAX_RESULTS_PER_LANE) ??
+    DEFAULT_MAX_RESULTS_PER_LANE
+  );
+}
+
+function resolveMaxRawContentChars(): number {
+  return (
+    parsePositiveInt(process.env.LLM_TAVILY_MAX_RAW_CHARS) ??
+    DEFAULT_MAX_RAW_CONTENT_CHARS
+  );
+}
 
 function buildMarketUrl(slug: string): string {
   return `${MARKET_BASE_URL}/${slug}`;
@@ -331,17 +359,24 @@ function sortTavilyResults(tavily_results: TavilyLaneResult[]): TavilyLaneResult
 function normalizeTavilyResults(
   tavily_results: TavilyLaneResult[]
 ): TavilyLaneResult[] {
+  const maxResultsPerLane = resolveMaxResultsPerLane();
+  const maxRawChars = resolveMaxRawContentChars();
   const sorted = sortTavilyResults(tavily_results);
   return sorted.map((lane) => ({
     lane: lane.lane,
     query: lane.query,
-    results: lane.results.map((result: TavilySearchResult) => ({
-      title: result.title,
-      url: result.url,
-      domain: result.domain,
-      published_at: result.published_at,
-      raw_content: result.raw_content
-    }))
+    results: lane.results
+      .slice(Math.max(0, lane.results.length - maxResultsPerLane))
+      .map((result: TavilySearchResult) => ({
+        title: result.title,
+        url: result.url,
+        domain: result.domain,
+        published_at: result.published_at,
+        raw_content:
+          result.raw_content === null
+            ? null
+            : truncateText(result.raw_content, maxRawChars)
+      }))
   }));
 }
 

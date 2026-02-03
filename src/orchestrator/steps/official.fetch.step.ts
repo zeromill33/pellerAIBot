@@ -24,6 +24,7 @@ type OfficialFetchOptions = {
 };
 
 const DEFAULT_TIMEOUT_MS = 8000;
+const FALLBACK_PUBLISHED_AT = "1970-01-01T00:00:00Z";
 
 function decodeHtmlEntities(text: string): string {
   return text
@@ -126,7 +127,7 @@ export async function fetchOfficialSource(
     const text = stripHtml(body);
     const snippet = truncate(text, 280);
     const title = extractTitle(body) ?? input.resolver_url;
-    const published_at = extractPublishedAt(body) ?? "N/A";
+    const published_at = extractPublishedAt(body) ?? FALLBACK_PUBLISHED_AT;
     const domain = new URL(input.resolver_url).hostname;
 
     return {

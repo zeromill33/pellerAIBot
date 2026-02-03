@@ -43,6 +43,8 @@ const RISK_ATTRIBUTION_ALIASES = new Map<string, string>([
 ]);
 
 const REQUIRED_NOT_INCLUDED = ["no_bet_advice", "no_position_sizing"] as const;
+const PLACEHOLDER_VALUES = new Set(["N/A", "unknown"]);
+const FALLBACK_TIMESTAMP = "1970-01-01T00:00:00Z";
 const CALL_TO_ACTION_PATTERNS: RegExp[] = [
   /买入|卖出|做多|做空|加仓|减仓|止损|止盈|下注|押注|梭哈|仓位管理|资金管理/,
   /\b(buy|sell|long|short|go long|go short|bet|wager|stop loss|take profit|position sizing|position size|all in)\b/i
@@ -461,9 +463,128 @@ function validateOfficialSources(report: ReportObject) {
   }
 }
 
+function normalizeAiVsMarket(report: ReportObject) {
+  const aiVsMarket =
+    report.ai_vs_market && typeof report.ai_vs_market === "object"
+      ? (report.ai_vs_market as ReportObject)
+      : null;
+  if (!aiVsMarket) {
+    return;
+  }
+  const marketYes = aiVsMarket.market_yes;
+  const aiYes = aiVsMarket.ai_yes_beta;
+  if (typeof marketYes === "number" && typeof aiYes === "number") {
+    aiVsMarket.delta = aiYes - marketYes;
+  }
+}
+
+function normalizeSentiment(report: ReportObject) {
+  const sentiment =
+    report.sentiment && typeof report.sentiment === "object"
+      ? (report.sentiment as ReportObject)
+      : null;
+  if (!sentiment) {
+    return;
+  }
+  const samples = sentiment.samples;
+  if (Array.isArray(samples) && samples.length === 0) {
+    sentiment.bias = "unknown";
+    sentiment.relation = "unknown";
+  }
+}
+
+function normalizeOfficialSources(report: ReportObject) {
+  const sources = report.official_sources;
+  if (!Array.isArray(sources)) {
+    return;
+  }
+  for (const item of sources) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      continue;
+    }
+    const record = item as ReportObject;
+    const publishedAt = record.published_at;
+    if (
+      typeof publishedAt !== "string" ||
+      publishedAt.trim().length === 0 ||
+      PLACEHOLDER_VALUES.has(publishedAt)
+    ) {
+      record.published_at = FALLBACK_TIMESTAMP;
+    }
+  }
+}
+
+function normalizeDisagreementPlaceholders(report: ReportObject) {
+  const context = report.context;
+  const marketUrl =
+    context && typeof context === "object" && !Array.isArray(context)
+      ? (context as ReportObject).url
+      : undefined;
+  if (typeof marketUrl !== "string" || marketUrl.trim().length === 0) {
+    return;
+  }
+  const disagreement =
+    report.disagreement_map &&
+    typeof report.disagreement_map === "object" &&
+    !Array.isArray(report.disagreement_map)
+      ? (report.disagreement_map as ReportObject)
+      : null;
+  if (!disagreement) {
+    return;
+  }
+  const lanes = ["pro", "con"] as const;
+  const isPlaceholder = (value: unknown): boolean =>
+    typeof value === "string" && PLACEHOLDER_VALUES.has(value);
+  for (const lane of lanes) {
+    const items = disagreement[lane];
+    if (!Array.isArray(items)) {
+      continue;
+    }
+    for (const item of items) {
+      if (!item || typeof item !== "object" || Array.isArray(item)) {
+        continue;
+      }
+      const record = item as ReportObject;
+      const url = record.url;
+      const isMarketUrl =
+        typeof url === "string" && url.trim().length > 0 && url.trim() === marketUrl;
+      const time = record.time;
+      const publishedAt = record.published_at;
+      const timeMissing =
+        typeof time !== "string" || time.trim().length === 0 || isPlaceholder(time);
+      const publishedMissing =
+        typeof publishedAt !== "string" ||
+        publishedAt.trim().length === 0 ||
+        isPlaceholder(publishedAt);
+      if (timeMissing) {
+        if (typeof publishedAt === "string" && publishedAt.trim().length > 0 && !isPlaceholder(publishedAt)) {
+          record.time = publishedAt;
+        } else if (isMarketUrl) {
+          record.time = "N/A";
+        } else {
+          record.time = FALLBACK_TIMESTAMP;
+        }
+      }
+      if (publishedMissing) {
+        if (typeof time === "string" && time.trim().length > 0 && !isPlaceholder(time)) {
+          record.published_at = time;
+        } else if (isMarketUrl) {
+          record.published_at = "N/A";
+        } else {
+          record.published_at = FALLBACK_TIMESTAMP;
+        }
+      }
+    }
+  }
+}
+
 export function postprocessReportV1Json(text: string): ReportV1Json {
   const parsed = parseJsonStrict(text);
   const report = expectObject(parsed, "report");
+  normalizeAiVsMarket(report);
+  normalizeSentiment(report);
+  normalizeOfficialSources(report);
+  normalizeDisagreementPlaceholders(report);
   validateTopLevel(report);
   validateContext(report);
   validateAiVsMarket(report);

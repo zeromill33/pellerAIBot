@@ -13,6 +13,7 @@ import type {
 } from "./types.js";
 
 const DEFAULT_MODEL = "gpt-4o-mini";
+const DEFAULT_FALLBACK_MODELS = ["gpt-4o"];
 const DEFAULT_TEMPERATURE = 0;
 
 function parseTemperature(value: string | undefined): number | undefined {
@@ -24,6 +25,42 @@ function parseTemperature(value: string | undefined): number | undefined {
     return undefined;
   }
   return parsed;
+}
+
+function parseModelList(value: string | undefined): string[] {
+  if (!value) {
+    return [];
+  }
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+}
+
+function resolveModelCandidates(primary: string): string[] {
+  const envFallbacks = parseModelList(process.env.LLM_MODEL_FALLBACKS);
+  const candidates = [primary, ...envFallbacks, ...DEFAULT_FALLBACK_MODELS];
+  const seen = new Set<string>();
+  return candidates.filter((model) => {
+    if (seen.has(model)) {
+      return false;
+    }
+    seen.add(model);
+    return true;
+  });
+}
+
+function isModelNotFound(error: unknown): boolean {
+  if (error && typeof error === "object") {
+    const record = error as { details?: Record<string, unknown>; message?: string };
+    const status = record.details?.status;
+    if (status === 404) {
+      return true;
+    }
+    const message = record.message ?? "";
+    return /model/i.test(message) && /not found|does not exist|unknown/i.test(message);
+  }
+  return false;
 }
 
 function resolveAdapter(adapter: LLMAdapter | undefined): LLMAdapter {
@@ -65,22 +102,37 @@ export function createLLMProvider(options: LLMProviderOptions = {}): LLMProvider
       const promptInput = buildPromptInput(input);
       const prompt = buildReportPrompt(promptInput);
       const model = options.model ?? process.env.LLM_MODEL?.trim() ?? DEFAULT_MODEL;
+      const modelCandidates = resolveModelCandidates(model);
       const temperature =
         options.temperature ??
         parseTemperature(process.env.LLM_TEMPERATURE) ??
         DEFAULT_TEMPERATURE;
-      const audit: LlmAuditEntry = {
-        prompt_name: prompt.prompt_name,
-        prompt_sha256: prompt.prompt_sha256,
-        model,
-        temperature
-      };
-      (options.onAudit ?? defaultAudit)(audit);
-      const response = await adapter.generateJson(
-        { system: prompt.system, user: prompt.user },
-        { model, temperature }
-      );
-      return postprocessReportV1Json(response.text);
+      let lastError: unknown = null;
+
+      for (const candidate of modelCandidates) {
+        const audit: LlmAuditEntry = {
+          prompt_name: prompt.prompt_name,
+          prompt_sha256: prompt.prompt_sha256,
+          model: candidate,
+          temperature
+        };
+        (options.onAudit ?? defaultAudit)(audit);
+        try {
+          const response = await adapter.generateJson(
+            { system: prompt.system, user: prompt.user },
+            { model: candidate, temperature }
+          );
+          return postprocessReportV1Json(response.text);
+        } catch (error) {
+          lastError = error;
+          if (isModelNotFound(error)) {
+            continue;
+          }
+          throw error;
+        }
+      }
+
+      throw lastError;
     }
   };
 }

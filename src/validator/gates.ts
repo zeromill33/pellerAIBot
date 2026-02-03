@@ -594,6 +594,27 @@ function findPlaceholderViolation(report: ReportV1): {
             }
           };
         }
+        const publishedMatch = path.match(
+          /^disagreement_map\.(pro|con)\[(\d+)\]\.published_at$/u
+        );
+        if (publishedMatch) {
+          const lane = publishedMatch[1] as "pro" | "con";
+          const index = Number(publishedMatch[2]);
+          const item = report.disagreement_map?.[lane]?.[index];
+          const marketUrl = report.context?.url;
+          if (item && marketUrl && item.url === marketUrl) {
+            return null;
+          }
+          return {
+            path,
+            value,
+            reason: "N/A published_at requires market url",
+            details: {
+              market_url: marketUrl,
+              item_url: item?.url
+            }
+          };
+        }
         return {
           path,
           value,

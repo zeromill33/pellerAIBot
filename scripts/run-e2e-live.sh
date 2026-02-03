@@ -16,6 +16,14 @@ fi
 : "${TEST_LIVE:=1}"
 : "${E2E_LLM_LIVE:=1}"
 : "${E2E_TIMEOUT_MS:=120000}"
+: "${LLM_TIMEOUT_MS:=60000}"
+: "${LLM_RETRIES:=2}"
+: "${LLM_RETRY_BASE_MS:=500}"
+: "${LLM_RETRY_MAX_MS:=5000}"
+: "${LLM_JSON_MODE_FALLBACK:=1}"
+: "${LLM_MODEL_FALLBACKS:=gpt-4o}"
+: "${LLM_TAVILY_MAX_RESULTS_PER_LANE:=8}"
+: "${LLM_TAVILY_MAX_RAW_CHARS:=1200}"
 
 missing=()
 if [[ -z "${TAVILY_API_KEY:-}" ]]; then
